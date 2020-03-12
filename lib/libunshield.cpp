@@ -13,14 +13,6 @@
 #include <regex>
 #include <iostream>
 
-// Realloc that frees source memory if new alloc fails.
-void* UnshieldRealloc(void* p, size_t s)
-{
-	void* pr = realloc(p, s);
-	if (!pr) free(p);
-	return pr;
-}
-
 /**
   Create filenamepath used by unshield_fopen_for_reading()
  */
@@ -114,8 +106,7 @@ static bool unshield_get_file_table(Header* header)
 	int count = header->cab.directory_count + header->cab.file_count;
 	int i;
 
-	header->file_table = (uint32_t*)calloc(count, sizeof(uint32_t));
-	if (!header->file_table) return false;
+	header->file_table.resize(count);
 
 	for (i = 0; i < count; i++)
 	{
@@ -125,13 +116,13 @@ static bool unshield_get_file_table(Header* header)
 	return true;
 }
 
-static bool unshield_header_get_components(Header* header)/*{{{*/
+static bool unshield_header_get_components(Header* header)
 {
 	int count = 0;
 	int i;
 	int available = 16;
 
-	header->components = (UnshieldComponent**)malloc(available * sizeof(UnshieldComponent*));
+	header->components.resize(available);
 
 	for (i = 0; i < MAX_COMPONENT_COUNT; i++)
 	{
@@ -152,20 +143,16 @@ static bool unshield_header_get_components(Header* header)/*{{{*/
 				if (count == available)
 				{
 					available <<= 1;
-					header->components = (UnshieldComponent**)UnshieldRealloc(header->components, available * sizeof(UnshieldComponent*));
+					header->components.resize(available);
 				}
 
-				if (!header->components) return false;
-
-				header->components[count++] = unshield_component_new(header, list.descriptor_offset);
+				header->components[count++] = new UnshieldComponent(header, list.descriptor_offset);
 			}
 		}
 	}
 
-	header->component_count = count;
-
 	return true;
-}  /*}}}*/
+}
 
 static bool unshield_header_get_file_groups(Header* header)/*{{{*/
 {
@@ -173,7 +160,7 @@ static bool unshield_header_get_file_groups(Header* header)/*{{{*/
 	int i;
 	int available = 16;
 
-	header->file_groups = (UnshieldFileGroup**)malloc(available * sizeof(UnshieldFileGroup*));
+	header->file_groups.resize(available);
 
 	for (i = 0; i < MAX_FILE_GROUP_COUNT; i++)
 	{
@@ -195,17 +182,13 @@ static bool unshield_header_get_file_groups(Header* header)/*{{{*/
 				{
 					available <<= 1;
 
-					header->file_groups = (UnshieldFileGroup**)UnshieldRealloc(header->file_groups, available * sizeof(UnshieldFileGroup*));;
+					header->file_groups.resize(available);
 				}
 
-				if (!header->file_groups) return false;
-
-				header->file_groups[count++] = unshield_file_group_new(header, list.descriptor_offset);
+				header->file_groups[count++] = new UnshieldFileGroup(header, list.descriptor_offset);
 			}
 		}
 	}
-
-	header->file_group_count = count;
 
 	return true;
 }  /*}}}*/
@@ -247,22 +230,17 @@ static bool unshield_read_headers(Unshield* unshield, int version)/*{{{*/
 		if (file)
 		{
 			size_t bytes_read;
-			Header* header = NEW1(Header);
+			Header* header = new Header();
 			header->index = i;
 
-			header->size = FSIZE(file);
+			header->size = unshield_fsize(file);
 			if (header->size < 4)
 			{
 				unshield_error(L"Header file %i too small", i);
 				goto error;
 			}
 
-			header->data = (uint8_t*)malloc(header->size);
-			if (!header->data)
-			{
-				unshield_error(L"Failed to allocate memory for header file %i", i);
-				goto error;
-			}
+			header->data = new uint8_t[header->size];
 
 			bytes_read = fread(header->data, 1, header->size, file);
 			FCLOSE(file);
@@ -349,9 +327,7 @@ static bool unshield_read_headers(Unshield* unshield, int version)/*{{{*/
 			continue;
 
 		error:
-			if (header)
-				FREE(header->data);
-			FREE(header);
+			delete header;
 			iterate = false;
 		}
 		else
@@ -368,12 +344,7 @@ Unshield* unshield_open(const char* filename)/*{{{*/
 
 Unshield* unshield_open_force_version(const char* filename, int version)/*{{{*/
 {
-	Unshield* unshield = NEW1(Unshield);
-	if (!unshield)
-	{
-		unshield_error(L"Failed to allocate memory for Unshield structure");
-		goto error;
-	}
+	Unshield* unshield = new Unshield;
 
 	if (!unshield_create_filename_path(unshield, filename))
 	{
@@ -394,21 +365,6 @@ error:
 	return NULL;
 }/*}}}*/
 
-
-static void unshield_free_string_buffers(Header* header)
-{
-	StringBuffer* current = header->string_buffer;
-	header->string_buffer = NULL;
-
-	while (current != NULL)
-	{
-		StringBuffer* next = current->next;
-		FREE(current->string);
-		FREE(current);
-		current = next;
-	}
-}
-
 void unshield_close(Unshield* unshield)/*{{{*/
 {
 	if (unshield)
@@ -418,41 +374,14 @@ void unshield_close(Unshield* unshield)/*{{{*/
 		for (header = unshield->header_list; header; )
 		{
 			Header* next = header->next;
-			int i;
 
-			unshield_free_string_buffers(header);
-
-			if (header->components)
-			{
-				for (i = 0; i < header->component_count; i++)
-					unshield_component_destroy(header->components[i]);
-				free(header->components);
-			}
-
-			if (header->file_groups)
-			{
-				for (i = 0; i < header->file_group_count; i++)
-					unshield_file_group_destroy(header->file_groups[i]);
-				free(header->file_groups);
-			}
-
-			if (header->file_descriptors)
-			{
-				for (i = 0; i < (int)header->cab.file_count; i++)
-					FREE(header->file_descriptors[i]);
-				free(header->file_descriptors);
-			}
-
-			FREE(header->file_table);
-
-			FREE(header->data);
-			FREE(header);
+			delete header;
 
 			header = next;
 		}
 
-		free(unshield);
+		delete unshield;
 	}
-}/*}}}*/
+}
 
 

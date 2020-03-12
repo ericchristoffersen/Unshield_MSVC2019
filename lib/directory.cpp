@@ -2,25 +2,20 @@
 #include "internal.h"
 #include "log.h"
 
-int unshield_directory_count(Unshield* unshield)
+int _Unshield::unshield_directory_count() const
 {
-  if (unshield)
-  {
-    /* XXX: multi-volume support... */
-    Header* header = unshield->header_list;
+	/* XXX: multi-volume support... */
+	Header* header = this->header_list;
 
-    return header->cab.directory_count;
-  }
-  else
-    return -1;
+	return header->cab.directory_count;
 }
 
-const char* unshield_directory_name(Unshield* unshield, int index)
+const char* _Unshield::unshield_directory_name(int index)
 {
-  if (unshield && index >= 0)
+  if (index >= 0)
   {
     /* XXX: multi-volume support... */
-    Header* header = unshield->header_list;
+    Header* header = this->header_list;
 
     if (index < (int)header->cab.directory_count)
       return unshield_get_utf8_string(header, 

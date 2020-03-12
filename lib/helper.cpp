@@ -159,27 +159,19 @@ static int unshield_strlen_utf16(const uint16_t* utf16)
   return (int)(current - utf16);
 }
 
-
-static StringBuffer* unshield_add_string_buffer(Header* header)
+StringBuffer* _Header::add_string_buffer()
 {
-  StringBuffer* result = NEW1(StringBuffer);
-  if (!result) {
-      return NULL;
-  }
-  result->next = header->string_buffer;
-  return header->string_buffer = result;
+  StringBuffer* result = new StringBuffer();
+  result->next = this->string_buffer;
+  return this->string_buffer = result;
 }
-
 
 static const char* unshield_utf16_to_utf8(Header* header, const uint16_t* utf16)
 {
-  StringBuffer* string_buffer = unshield_add_string_buffer(header); 
-  if (!string_buffer)
-      return NULL;
-
+  StringBuffer* string_buffer = header->add_string_buffer(); 
   int length = unshield_strlen_utf16(utf16);
   int buffer_size = 2 * length + 1;
-  char* target = string_buffer->string = NEW(char, buffer_size);
+  char* target = string_buffer->string = new char[buffer_size];
   ConversionResult result = ConvertUTF16toUTF8(
       (const UTF16**)&utf16, utf16 + length + 1, 
       (UTF8**)&target, (UTF8*)(target + buffer_size), lenientConversion);

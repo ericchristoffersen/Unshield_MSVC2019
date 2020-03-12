@@ -32,8 +32,6 @@
 #define VERSION "Unknown"
 #endif
 
-#define FREE(ptr)       { if (ptr) { free(ptr); ptr = NULL; } }
-
 #include <string.h>
 #include <stdio.h>
 
@@ -132,10 +130,6 @@ typedef enum
 
 #define DEFAULT_OUTPUT_DIRECTORY  "."
 
-//#define bool char
-//#define true 1
-//#define false 0
-
 static const char* output_directory   = DEFAULT_OUTPUT_DIRECTORY;
 static const char* file_group_name    = NULL;
 static const char* component_name     = NULL;
@@ -151,9 +145,6 @@ static int is_version                 = -1;
 static const char* cab_file_name      = NULL;
 static char* const* path_names        = NULL;
 static int path_name_count            = 0;
-
-#include <filesystem>
-
 
 static void show_usage(const char* name)
 {
@@ -353,11 +344,11 @@ void cleanup_path(std::filesystem::path& pa, bool make_lowercase)
     pa.assign(std::filesystem::path(pathString).make_preferred());
 }
 
-static bool extract_file(Unshield* unshield, const char* prefix, int index)
+bool _Unshield::extract_file(const char* prefix, int index)
 {
 	bool success = false;
 
-    int directory = unshield_file_directory(unshield, index);
+    int directory = this->unshield_file_directory(index);
 
     std::filesystem::path dirpath = output_directory;
 
@@ -368,7 +359,7 @@ static bool extract_file(Unshield* unshield, const char* prefix, int index)
 
 	if (!junk_paths && directory >= 0)
 	{
-		const char* tmp = unshield_directory_name(unshield, directory);
+		const char* tmp = this->unshield_directory_name(directory);
 		if (tmp && tmp[0])
 		{
             dirpath.append(tmp);
@@ -381,7 +372,7 @@ static bool extract_file(Unshield* unshield, const char* prefix, int index)
 
     std::filesystem::path filenamepath = dirpath;
     
-    filenamepath.append(unshield_file_name(unshield, index));
+    filenamepath.append(this->unshield_file_name(index));
 
     cleanup_path(filenamepath, make_lowercase);
 
@@ -389,20 +380,20 @@ static bool extract_file(Unshield* unshield, const char* prefix, int index)
 	switch (format)
 	{
 	case FORMAT_NEW:
-		success = unshield_file_save(unshield, index, filenamepath);
+		success = this->unshield_file_save(index, filenamepath);
 		break;
 	case FORMAT_OLD:
-		success = unshield_file_save_old(unshield, index, filenamepath);
+		success = this->unshield_file_save_old(index, filenamepath);
 		break;
 	case FORMAT_RAW:
-		success = unshield_file_save_raw(unshield, index, filenamepath);
+		success = this->unshield_file_save_raw(index, filenamepath);
 		break;
 	}
 
 	if (!success)
  	{
 		fprintf(stderr, "Failed to extract file '%s'.%s\n",
-			unshield_file_name(unshield, index),
+			this->unshield_file_name(index),
 			(log_level < 3) ? "Run unshield again with -D 3 for more information." : "");
 		exit_status = 1;
 	}
@@ -410,7 +401,7 @@ static bool extract_file(Unshield* unshield, const char* prefix, int index)
 	return success;
 }
 
-static bool should_process_file(Unshield* unshield, int index)
+bool _Unshield::should_process_file(int index)
 {
   int i;
 
@@ -423,7 +414,7 @@ static bool should_process_file(Unshield* unshield, int index)
     if (fnmatch(path_names[i], unshield_file_name(unshield, index), 0) == 0)
       return true;
 #else
-    if (strcmp(path_names[i], unshield_file_name(unshield, index)) == 0)
+    if (strcmp(path_names[i], this->unshield_file_name(index)) == 0)
       return true;
 #endif
   }
@@ -431,32 +422,32 @@ static bool should_process_file(Unshield* unshield, int index)
   return false;
 }
 
-static int extract_helper(Unshield* unshield, const char* prefix, int first, int last)/*{{{*/
+int _Unshield::extract_helper(const char* prefix, int first, int last)/*{{{*/
 {
   int i;
   int count = 0;
   
   for (i = first; i <= last; i++)
   {
-    if (unshield_file_is_valid(unshield, i) 
-        && should_process_file(unshield, i) 
-        && extract_file(unshield, prefix, i))
+    if (this->unshield_file_is_valid(i) 
+        && this->should_process_file(i) 
+        && this->extract_file(prefix, i))
       count++;
   }
 
   return count;
 }/*}}}*/
 
-static bool test_file(Unshield* unshield, int index)
+bool _Unshield::test_file(int index)
 {
-  printf("  testing: %s\n", unshield_file_name(unshield, index));
+  printf("  testing: %s\n", this->unshield_file_name(index));
 
   std::filesystem::path nope;
-  bool success = unshield_file_save(unshield, index, nope);
+  bool success = this->unshield_file_save(index, nope);
   if (!success)
   {
     fprintf(stderr, "Failed to extract file '%s'.%s\n", 
-        unshield_file_name(unshield, index),
+        this->unshield_file_name(index),
         (log_level < 3) ? "Run unshield again with -D 3 for more information." : "");
     exit_status = 1;
   }
@@ -464,66 +455,64 @@ static bool test_file(Unshield* unshield, int index)
   return success;
 }
 
-static int test_helper(Unshield* unshield, const char* prefix, int first, int last)/*{{{*/
+int _Unshield::test_helper(const char* prefix, int first, int last)/*{{{*/
 {
   int i;
   int count = 0;
   
   for (i = first; i <= last; i++)
   {
-    if (unshield_file_is_valid(unshield, i) && test_file(unshield, i))
+    if (this->unshield_file_is_valid(i) && this->test_file(i))
       count++;
   }
 
   return count;
 }/*}}}*/
 
-static bool list_components(Unshield* unshield)
+bool _Unshield::list_components() const
 {
-  int i;
-  int count = unshield_component_count(unshield);
+  size_t count = this->unshield_component_count();
 
   if (count < 0)
     return false;
   
-  for (i = 0; i < count; i++)
+  for (size_t i = 0; i < count; i++)
   {
-    printf("%s\n", unshield_component_name(unshield, i));
+    printf("%s\n", this->unshield_component_name(i));
   }
 
-  printf("-------\n%i components\n", count);
+  printf("-------\n%lli components\n", count);
 
 
   return true;
 }
 
-static bool list_file_groups(Unshield* unshield)
+bool _Unshield::list_file_groups() const
 {
-  int i;
-  int count = unshield_file_group_count(unshield);
+  size_t count = this->unshield_file_group_count();
 
   if (count < 0)
     return false;
   
-  for (i = 0; i < count; i++)
+  for (size_t i = 0; i < count; i++)
   {
-    printf("%s\n", unshield_file_group_name(unshield, i));
+    printf("%s\n", this->unshield_file_group_name(i));
   }
 
-  printf("-------\n%i file groups\n", count);
+  printf("-------\n%lli file groups\n", count);
 
 
   return true;
 }
 
-static int list_files_helper(Unshield* unshield, const char* prefix, int first, int last)/*{{{*/
+int _Unshield::list_files_helper(const char* prefix, int first, int last)/*{{{*/
 {
   int i;
   int valid_count = 0;
 
   for (i = first; i <= last; i++)
   {
-    if (unshield_file_is_valid(unshield, i) && should_process_file(unshield, i))
+    if (this->unshield_file_is_valid(i) && this->should_process_file(i))
     {
       valid_count++;
 
@@ -534,21 +523,19 @@ static int list_files_helper(Unshield* unshield, const char* prefix, int first, 
           dirpath.append(prefix);
       }
 
-      dirpath.append(unshield_directory_name(unshield, unshield_file_directory(unshield, i)));
+      dirpath.append(this->unshield_directory_name(this->unshield_file_directory(i)));
 
       printf(" %8zi  %s%s\n",
-          unshield_file_size(unshield, i),
+          this->unshield_file_size(i),
           dirpath.make_preferred().generic_string().c_str(),
-          unshield_file_name(unshield, i)); 
+          this->unshield_file_name(i)); 
     }
   }
 
   return valid_count;
 }/*}}}*/
 
-typedef int (*ActionHelper)(Unshield* unshield, const char* prefix, int first, int last);
-
-static bool do_action(Unshield* unshield, ActionHelper helper)
+bool _Unshield::do_action(ActionHelper helper)
 {
   int count = 0;
 
@@ -558,20 +545,20 @@ static bool do_action(Unshield* unshield, ActionHelper helper)
   }
   else if (file_group_name)
   {
-    UnshieldFileGroup* file_group = unshield_file_group_find(unshield, file_group_name);
+    UnshieldFileGroup* file_group = this->unshield_file_group_find(file_group_name);
     printf("File group: %s\n", file_group_name);
     if (file_group)
-      count = helper(unshield, file_group_name, file_group->first_file, file_group->last_file);
+      count = (this->*helper)(file_group_name, file_group->first_file, file_group->last_file);
   }
   else
   {
     int i;
 
-    for (i = 0; i < unshield_file_group_count(unshield); i++)
+    for (i = 0; i < this->unshield_file_group_count(); i++)
     {
-      UnshieldFileGroup* file_group = unshield_file_group_get(unshield, i);
+      UnshieldFileGroup* file_group = this->unshield_file_group_get(i);
       if (file_group)
-        count += helper(unshield, file_group->name, file_group->first_file, file_group->last_file);
+        count += (this->*helper)(file_group->name, file_group->first_file, file_group->last_file);
     }
   }
 
@@ -602,19 +589,19 @@ int main(int argc, char* const argv[])
   switch (action)
   {
     case ACTION_EXTRACT:
-      success = do_action(unshield, extract_helper);
+      success = unshield->do_action(&_Unshield::extract_helper);
       break;
 
     case ACTION_LIST_COMPONENTS:
-      success = list_components(unshield);
+      success = unshield->list_components();
       break;
 
     case ACTION_LIST_FILE_GROUPS:
-      success = list_file_groups(unshield);
+      success = unshield->list_file_groups();
       break;
 
     case ACTION_LIST_FILES:
-      success = do_action(unshield, list_files_helper);
+      success = unshield->do_action(&_Unshield::list_files_helper);
       break;
       
     case ACTION_TEST:
@@ -622,7 +609,7 @@ int main(int argc, char* const argv[])
         fprintf(stderr, "Output directory (-d) option has no effect with test (t) command.\n");
       if (make_lowercase)
         fprintf(stderr, "Make lowercase (-L) option has no effect with test (t) command.\n");
-      success = do_action(unshield, test_helper);
+      success = unshield->do_action(&_Unshield::test_helper);
       break;
   }
 
