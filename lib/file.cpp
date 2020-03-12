@@ -50,7 +50,7 @@ FILE* UnshieldFileOpen(
 }
 #endif
 
-FileDescriptor* _Unshield::unshield_read_file_descriptor(size_t index)
+FileDescriptor* Unshield::unshield_read_file_descriptor(size_t index)
 {
   /* XXX: multi-volume support... */
   Header* header = this->header_list;
@@ -161,7 +161,7 @@ FileDescriptor* _Unshield::unshield_read_file_descriptor(size_t index)
   return fd;
 }
 
-FileDescriptor* _Unshield::unshield_get_file_descriptor(size_t index)
+FileDescriptor* Unshield::unshield_get_file_descriptor(size_t index)
 {
   /* XXX: multi-volume support... */
   Header* header = this->header_list;
@@ -180,7 +180,7 @@ FileDescriptor* _Unshield::unshield_get_file_descriptor(size_t index)
   return header->file_descriptors[index];
 }
 
-int _Unshield::unshield_file_count () const
+int Unshield::unshield_file_count () const
 {
     /* XXX: multi-volume support... */
     Header* header = this->header_list;
@@ -188,7 +188,7 @@ int _Unshield::unshield_file_count () const
     return header->cab.file_count;
 }/*}}}*/
 
-const char* _Unshield::unshield_file_name (size_t index)/*{{{*/
+const char* Unshield::unshield_file_name (size_t index)/*{{{*/
 {
   FileDescriptor* fd = this->unshield_get_file_descriptor(index);
 
@@ -208,12 +208,12 @@ const char* _Unshield::unshield_file_name (size_t index)/*{{{*/
   return NULL;
 }/*}}}*/
 
-bool _Unshield::unshield_file_is_valid(size_t index)
+bool Unshield::unshield_file_is_valid(size_t index)
 {
   bool is_valid = false;
   FileDescriptor* fd;
 
-  if (index < 0 || index >= this->unshield_file_count())
+  if (index < 0 || index >= (size_t)this->unshield_file_count())
     goto exit;
 
   if (!(fd = this->unshield_get_file_descriptor(index)))
@@ -664,7 +664,7 @@ void UnshieldReader::unshield_reader_destroy()
 /*
  * If filename is NULL, just throw away the result
  */
-bool _Unshield::unshield_file_save (size_t index, const std::filesystem::path &filenamepath)/*{{{*/
+bool Unshield::unshield_file_save (size_t index, const std::filesystem::path &filenamepath)/*{{{*/
 {
   bool success = false;
   FILE* output = NULL;
@@ -848,7 +848,7 @@ exit:
   return success;
 }
 
-int _Unshield::unshield_file_directory(size_t index)/*{{{*/
+int Unshield::unshield_file_directory(size_t index)/*{{{*/
 {
   FileDescriptor* fd = this->unshield_get_file_descriptor(index);
   if (fd)
@@ -859,7 +859,7 @@ int _Unshield::unshield_file_directory(size_t index)/*{{{*/
     return -1;
 }/*}}}*/
 
-size_t _Unshield::unshield_file_size(size_t index)
+size_t Unshield::unshield_file_size(size_t index)
 {
   FileDescriptor* fd = this->unshield_get_file_descriptor(index);
   if (fd)
@@ -870,7 +870,7 @@ size_t _Unshield::unshield_file_size(size_t index)
     return 0;
 }/*}}}*/
 
-bool _Unshield::unshield_file_save_raw(size_t index, const std::filesystem::path& filenamepath)
+bool Unshield::unshield_file_save_raw(size_t index, const std::filesystem::path& filenamepath)
 {
   /* XXX: Thou Shalt Not Cut & Paste... */
   bool success = false;
@@ -992,7 +992,7 @@ static uint8_t* find_bytes(
   return NULL;
 }
 
-bool _Unshield::unshield_file_save_old(size_t index, const std::filesystem::path& filenamepath)/*{{{*/
+bool Unshield::unshield_file_save_old(size_t index, const std::filesystem::path& filenamepath)/*{{{*/
 {
   /* XXX: Thou Shalt Not Cut & Paste... */
   bool success = false;

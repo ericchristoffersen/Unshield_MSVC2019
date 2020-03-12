@@ -15,7 +15,7 @@
 #define UNSHIELD_LOG_LEVEL_HIGHEST   4
 
 
-typedef struct _Unshield Unshield;
+struct Unshield;
 
 
 /*
@@ -37,8 +37,8 @@ void unshield_close(Unshield* unshield);
    Component functions
  */
 
-typedef struct _Header Header;
-struct _Header;
+typedef struct Header Header;
+struct Header;
 
 struct UnshieldComponent
 {

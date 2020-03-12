@@ -2,7 +2,7 @@
 #include "internal.h"
 #include "log.h"
 
-int _Unshield::unshield_directory_count() const
+int Unshield::unshield_directory_count() const
 {
 	/* XXX: multi-volume support... */
 	Header* header = this->header_list;
@@ -10,7 +10,7 @@ int _Unshield::unshield_directory_count() const
 	return header->cab.directory_count;
 }
 
-const char* _Unshield::unshield_directory_name(int index)
+const char* Unshield::unshield_directory_name(int index)
 {
   if (index >= 0)
   {

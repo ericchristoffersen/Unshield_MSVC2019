@@ -4,13 +4,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-size_t _Unshield::unshield_component_count() const
+size_t Unshield::unshield_component_count() const
 {
   Header* header = this->header_list;
   return header->components.size();
 }
 
-const char* _Unshield::unshield_component_name(size_t index) const
+const char* Unshield::unshield_component_name(size_t index) const
 {
   Header* header = this->header_list;
 

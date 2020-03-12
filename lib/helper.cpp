@@ -159,7 +159,7 @@ static int unshield_strlen_utf16(const uint16_t* utf16)
   return (int)(current - utf16);
 }
 
-StringBuffer* _Header::add_string_buffer()
+StringBuffer* Header::add_string_buffer()
 {
   StringBuffer* result = new StringBuffer();
   result->next = this->string_buffer;

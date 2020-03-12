@@ -344,7 +344,7 @@ void cleanup_path(std::filesystem::path& pa, bool make_lowercase)
     pa.assign(std::filesystem::path(pathString).make_preferred());
 }
 
-bool _Unshield::extract_file(const char* prefix, int index)
+bool Unshield::extract_file(const char* prefix, int index)
 {
 	bool success = false;
 
@@ -401,7 +401,7 @@ bool _Unshield::extract_file(const char* prefix, int index)
 	return success;
 }
 
-bool _Unshield::should_process_file(int index)
+bool Unshield::should_process_file(int index)
 {
   int i;
 
@@ -422,7 +422,7 @@ bool _Unshield::should_process_file(int index)
   return false;
 }
 
-int _Unshield::extract_helper(const char* prefix, int first, int last)/*{{{*/
+int Unshield::extract_helper(const char* prefix, int first, int last)/*{{{*/
 {
   int i;
   int count = 0;
@@ -438,7 +438,7 @@ int _Unshield::extract_helper(const char* prefix, int first, int last)/*{{{*/
   return count;
 }/*}}}*/
 
-bool _Unshield::test_file(int index)
+bool Unshield::test_file(int index)
 {
   printf("  testing: %s\n", this->unshield_file_name(index));
 
@@ -455,7 +455,7 @@ bool _Unshield::test_file(int index)
   return success;
 }
 
-int _Unshield::test_helper(const char* prefix, int first, int last)/*{{{*/
+int Unshield::test_helper(const char* prefix, int first, int last)/*{{{*/
 {
   int i;
   int count = 0;
@@ -469,7 +469,7 @@ int _Unshield::test_helper(const char* prefix, int first, int last)/*{{{*/
   return count;
 }/*}}}*/
 
-bool _Unshield::list_components() const
+bool Unshield::list_components() const
 {
   size_t count = this->unshield_component_count();
 
@@ -487,7 +487,7 @@ bool _Unshield::list_components() const
   return true;
 }
 
-bool _Unshield::list_file_groups() const
+bool Unshield::list_file_groups() const
 {
   size_t count = this->unshield_file_group_count();
 
@@ -505,7 +505,7 @@ bool _Unshield::list_file_groups() const
   return true;
 }
 
-int _Unshield::list_files_helper(const char* prefix, int first, int last)/*{{{*/
+int Unshield::list_files_helper(const char* prefix, int first, int last)/*{{{*/
 {
   int i;
   int valid_count = 0;
@@ -535,7 +535,7 @@ int _Unshield::list_files_helper(const char* prefix, int first, int last)/*{{{*/
   return valid_count;
 }/*}}}*/
 
-bool _Unshield::do_action(ActionHelper helper)
+bool Unshield::do_action(ActionHelper helper)
 {
   int count = 0;
 
@@ -589,7 +589,7 @@ int main(int argc, char* const argv[])
   switch (action)
   {
     case ACTION_EXTRACT:
-      success = unshield->do_action(&_Unshield::extract_helper);
+      success = unshield->do_action(&Unshield::extract_helper);
       break;
 
     case ACTION_LIST_COMPONENTS:
@@ -601,7 +601,7 @@ int main(int argc, char* const argv[])
       break;
 
     case ACTION_LIST_FILES:
-      success = unshield->do_action(&_Unshield::list_files_helper);
+      success = unshield->do_action(&Unshield::list_files_helper);
       break;
       
     case ACTION_TEST:
@@ -609,7 +609,7 @@ int main(int argc, char* const argv[])
         fprintf(stderr, "Output directory (-d) option has no effect with test (t) command.\n");
       if (make_lowercase)
         fprintf(stderr, "Make lowercase (-L) option has no effect with test (t) command.\n");
-      success = unshield->do_action(&_Unshield::test_helper);
+      success = unshield->do_action(&Unshield::test_helper);
       break;
   }
 

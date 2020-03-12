@@ -6,16 +6,16 @@
 
 #define VERBOSE 1
 
-_StringBuffer::_StringBuffer() : next(NULL), string(NULL) {}
+StringBuffer::StringBuffer() : next(NULL), string(NULL) {}
 
-_StringBuffer::~_StringBuffer()
+StringBuffer::~StringBuffer()
 {
     delete [] string;
 }
 
-_Header::_Header() : next(NULL), index(0), data(NULL), size(0), major_version(0), string_buffer(NULL) {}
+Header::Header() : next(NULL), index(0), data(NULL), size(0), major_version(0), string_buffer(NULL) {}
 
-void _Header::free_string_buffers()
+void Header::free_string_buffers()
 {
     StringBuffer* current = this->string_buffer;
     this->string_buffer = NULL;
@@ -28,17 +28,17 @@ void _Header::free_string_buffers()
     }
 }
 
-_Header::~_Header()
+Header::~Header()
 {
     this->free_string_buffers();
 
-    for (int i = 0; i < this->components.size(); i++)
+    for (size_t i = 0; i < this->components.size(); i++)
         delete this->components[i];
 
-    for (int i = 0; i < this->file_groups.size(); i++)
+    for (size_t i = 0; i < this->file_groups.size(); i++)
         delete this->file_groups[i];
 
-    for (unsigned i = 0; i < this->file_descriptors.size(); i++)
+    for (size_t i = 0; i < this->file_descriptors.size(); i++)
         delete this->file_descriptors[i];
 
     delete [] this->data;
@@ -69,13 +69,13 @@ UnshieldFileGroup::UnshieldFileGroup(Header* header, uint32_t offset)
 
 }
 
-size_t _Unshield::unshield_file_group_count() const
+size_t Unshield::unshield_file_group_count() const
 {
   Header* header = this->header_list;
   return header->file_groups.size();
 }
 
-UnshieldFileGroup* _Unshield::unshield_file_group_get(size_t index)
+UnshieldFileGroup* Unshield::unshield_file_group_get(size_t index)
 {
   Header* header = this->header_list;
 
@@ -85,12 +85,11 @@ UnshieldFileGroup* _Unshield::unshield_file_group_get(size_t index)
     return NULL;
 }
 
-UnshieldFileGroup* _Unshield::unshield_file_group_find(const char* name)
+UnshieldFileGroup* Unshield::unshield_file_group_find(const char* name)
 {
   Header* header = this->header_list;
-  int i;
 
-  for (i = 0; i < header->file_groups.size(); i++)
+  for (size_t i = 0; i < header->file_groups.size(); i++)
   {
     if (STREQ(header->file_groups[i]->name, name))
       return header->file_groups[i];
@@ -99,7 +98,7 @@ UnshieldFileGroup* _Unshield::unshield_file_group_find(const char* name)
   return NULL;
 }
 
-const char* _Unshield::unshield_file_group_name(size_t index) const
+const char* Unshield::unshield_file_group_name(size_t index) const
 {
   Header* header = this->header_list;
 

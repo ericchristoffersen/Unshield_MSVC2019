@@ -199,7 +199,7 @@ int unshield_uncompress(Byte* dest, uLong* destLen, Byte* source, uLong* sourceL
 /**
   Read all header files
  */
-static bool unshield_read_headers(Unshield* unshield, int version)/*{{{*/
+static bool unshield_readHeaders(Unshield* unshield, int version)/*{{{*/
 {
 	int i;
 	bool iterate = true;
@@ -352,7 +352,7 @@ Unshield* unshield_open_force_version(const char* filename, int version)/*{{{*/
 		goto error;
 	}
 
-	if (!unshield_read_headers(unshield, version))
+	if (!unshield_readHeaders(unshield, version))
 	{
 		unshield_error(L"Failed to read header files");
 		goto error;
@@ -367,21 +367,7 @@ error:
 
 void unshield_close(Unshield* unshield)/*{{{*/
 {
-	if (unshield)
-	{
-		Header* header;
-
-		for (header = unshield->header_list; header; )
-		{
-			Header* next = header->next;
-
-			delete header;
-
-			header = next;
-		}
-
-		delete unshield;
-	}
+	delete unshield;
 }
 
 

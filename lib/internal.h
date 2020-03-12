@@ -18,20 +18,16 @@
 
 #include "cabfile.h"
 
-typedef struct _StringBuffer StringBuffer;
-
-struct _StringBuffer
+struct StringBuffer
 {
   StringBuffer* next;
   char* string;
 
-  _StringBuffer();
-  ~_StringBuffer();
+  StringBuffer();
+  ~StringBuffer();
 };
 
-typedef struct _Header Header;
-
-struct _Header
+struct Header
 {
   Header*   next;
   int       index;
@@ -53,8 +49,8 @@ struct _Header
 
   StringBuffer* string_buffer;
 
-  _Header();
-  ~_Header();
+  Header();
+  ~Header();
 
   StringBuffer* add_string_buffer();
   void          free_string_buffers();
@@ -62,7 +58,7 @@ struct _Header
 };
 
 
-struct _Unshield
+struct Unshield
 {
   Header* header_list;
   std::filesystem::path filename_path;
@@ -70,6 +66,17 @@ struct _Unshield
   size_t             unshield_component_count() const;
   const char*        unshield_component_name(size_t index) const;
   bool               list_components() const;
+
+  Unshield() : header_list(NULL) {}
+
+  ~Unshield() {
+      Header* header;
+      for (header = this->header_list; header; ) {
+          Header* next = header->next;
+          delete header;
+          header = next;
+      }
+  }
 
   /*
      File group functions
@@ -121,7 +128,7 @@ struct _Unshield
   int                extract_helper(const char* prefix, int first, int last);
   int                test_helper   (const char* prefix, int first, int last);
 
-  typedef int (_Unshield::*ActionHelper)(const char* prefix, int first, int last);
+  typedef int (Unshield::*ActionHelper)(const char* prefix, int first, int last);
   bool        do_action(ActionHelper helper);
 };
 
