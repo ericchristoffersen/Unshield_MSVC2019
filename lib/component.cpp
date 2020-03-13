@@ -4,30 +4,29 @@
 #include <stdlib.h>
 #include <string.h>
 
-int unshield_component_count(Unshield* unshield)
+size_t Unshield::unshield_component_count() const
 {
-  Header* header = unshield->header_list;
-  return header->component_count;
+  Header* header = this->header_list;
+  return header->components.size();
 }
 
-const char* unshield_component_name(Unshield* unshield, int index)
+const char* Unshield::unshield_component_name(size_t index) const
 {
-  Header* header = unshield->header_list;
+  Header* header = this->header_list;
 
-  if (index >= 0 && index < header->component_count)
+  if (index >= 0 && index < header->components.size())
     return header->components[index]->name;
   else
     return NULL;
 }
 
-UnshieldComponent* unshield_component_new(Header* header, uint32_t offset)
+UnshieldComponent::UnshieldComponent(Header* header, uint32_t offset)
 {
-  UnshieldComponent* self = NEW1(UnshieldComponent);
   uint8_t* p = unshield_header_get_buffer(header, offset);
   uint32_t file_group_table_offset;
   unsigned i;
 
-  self->name = unshield_header_get_string(header, READ_UINT32(p)); p += 4;
+  this->name = unshield_header_get_string(header, READ_UINT32(p)); p += 4;
 
   switch (header->major_version)
   {
@@ -49,32 +48,26 @@ UnshieldComponent* unshield_component_new(Header* header, uint32_t offset)
       break;
   }
 
-  self->file_group_count = READ_UINT16(p); p += 2;
-  if (self->file_group_count > MAX_FILE_GROUP_COUNT)
+  this->file_group_count = READ_UINT16(p); p += 2;
+  if (this->file_group_count > MAX_FILE_GROUP_COUNT)
     abort();
 
-  self->file_group_names = NEW(const char*, self->file_group_count);
+  this->file_group_names = new const char* [this->file_group_count];
 
   file_group_table_offset = READ_UINT32(p); p += 4;
 
   p = unshield_header_get_buffer(header, file_group_table_offset);
 
-  for (i = 0; i < self->file_group_count; i++)
+  for (i = 0; i < this->file_group_count; i++)
   {
-    self->file_group_names[i] = unshield_header_get_string(header, READ_UINT32(p)); 
+    this->file_group_names[i] = unshield_header_get_string(header, READ_UINT32(p)); 
     p += 4;
   }
-
-  return self;
 }
 
-void unshield_component_destroy(UnshieldComponent* self)
+UnshieldComponent::~UnshieldComponent()
 {
-  if (self)
-  {
-    FREE(self->file_group_names);
-    free(self);
-  }
+	delete[] this->file_group_names;
 }
 
 

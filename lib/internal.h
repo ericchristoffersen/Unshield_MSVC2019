@@ -18,17 +18,16 @@
 
 #include "cabfile.h"
 
-typedef struct _StringBuffer StringBuffer;
-
-struct _StringBuffer
+struct StringBuffer
 {
   StringBuffer* next;
   char* string;
+
+  StringBuffer();
+  ~StringBuffer();
 };
 
-typedef struct _Header Header;
-
-struct _Header
+struct Header
 {
   Header*   next;
   int       index;
@@ -39,40 +38,99 @@ struct _Header
   /* shortcuts */
   CommonHeader    common;
   CabDescriptor   cab;
-  uint32_t*       file_table;
-  FileDescriptor** file_descriptors;
 
-  int component_count;
-  UnshieldComponent** components;
+  std::vector<uint32_t>           file_table;
 
-  int file_group_count;
-  UnshieldFileGroup** file_groups;
+  std::vector<FileDescriptor*>    file_descriptors;
+
+  std::vector<UnshieldComponent*> components;
+
+  std::vector<UnshieldFileGroup*> file_groups;
 
   StringBuffer* string_buffer;
+
+  Header();
+  ~Header();
+
+  StringBuffer* add_string_buffer();
+  void          free_string_buffers();
+
 };
 
 
-struct _Unshield
+struct Unshield
 {
   Header* header_list;
   std::filesystem::path filename_path;
+
+  size_t             unshield_component_count() const;
+  const char*        unshield_component_name(size_t index) const;
+  bool               list_components() const;
+
+  Unshield() : header_list(NULL) {}
+
+  ~Unshield() {
+      Header* header;
+      for (header = this->header_list; header; ) {
+          Header* next = header->next;
+          delete header;
+          header = next;
+      }
+  }
+
+  /*
+     File group functions
+  */
+  size_t             unshield_file_group_count() const;
+  UnshieldFileGroup* unshield_file_group_get(size_t index);
+  UnshieldFileGroup* unshield_file_group_find(const char* name);
+  const char*        unshield_file_group_name(size_t index) const;
+  bool               list_file_groups() const;
+
+
+  /*
+     Directory functions
+   */
+
+  int                unshield_directory_count() const;
+  const char*        unshield_directory_name(int index);
+  int                unshield_file_directory(size_t index);
+
+  /*
+     File functions
+   */
+
+  int                unshield_file_count() const;
+  const char*        unshield_file_name(size_t index);
+  bool               unshield_file_is_valid(size_t index);
+  size_t             unshield_file_size(size_t index);
+  int                list_files_helper(const char* prefix, int first, int last);
+  bool               should_process_file(int index);
+
+  bool               unshield_file_save(size_t index, const std::filesystem::path& filenamepath);
+
+  /** For investigation of compressed data */
+  bool               unshield_file_save_raw(size_t index, const std::filesystem::path& filenamepath);
+
+  /** Maybe it's just gzip without size? */
+  bool               unshield_file_save_old(size_t index, const std::filesystem::path& filenamepath);
+
+  /*
+     File decriptor functions
+   */
+  FileDescriptor*    unshield_get_file_descriptor(size_t index);
+  FileDescriptor*    unshield_read_file_descriptor(size_t index);
+
+  bool               extract_file(const char* prefix, int index);
+  bool               test_file(int index);
+
+  // Actions
+  int                extract_helper(const char* prefix, int first, int last);
+  int                test_helper   (const char* prefix, int first, int last);
+
+  typedef int (Unshield::*ActionHelper)(const char* prefix, int first, int last);
+  bool        do_action(ActionHelper helper);
 };
-
-/*
-   Internal component functions
- */
-
-UnshieldComponent* unshield_component_new(Header* header, uint32_t offset);
-void unshield_component_destroy(UnshieldComponent* self);
-
-
-/* 
-   Internal file group functions
- */
-
-UnshieldFileGroup* unshield_file_group_new(Header* header, uint32_t offset);
-void unshield_file_group_destroy(UnshieldFileGroup* self);
-
 
 /*
    Helpers
@@ -98,12 +156,7 @@ uint8_t* unshield_header_get_buffer(Header* header, uint32_t offset);
    Macros for safer development
  */
 
-#define FREE(ptr)       { if (ptr) { free(ptr); ptr = NULL; } }
-#define STRDUP(str)     ((str) ? strdup(str) : NULL)
-#define NEW(type, count)      ((type*)calloc(count, sizeof(type)))
-#define NEW1(type)      ((type*)calloc(1, sizeof(type)))
 #define FCLOSE(file)    if (file) { fclose(file); file = NULL; }
-#define FSIZE(file)     (file ? unshield_fsize(file) : 0)
 #define STREQ(s1,s2)    (0 == strcmp(s1,s2))
 
 #if WORDS_BIGENDIAN

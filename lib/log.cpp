@@ -11,7 +11,7 @@ void unshield_set_log_level(int level)
 	current_log_level = level;
 }
 
-void _unshield_log(int level, const wchar_t* file, int line, const wchar_t* format, ...)
+void Unshield_log(int level, const wchar_t* file, int line, const wchar_t* format, ...)
 {
 	va_list ap;
 

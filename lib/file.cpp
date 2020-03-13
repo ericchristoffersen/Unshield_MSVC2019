@@ -34,8 +34,6 @@
 
 #include <string_view>
 
-void* UnshieldRealloc(void* p, size_t s);
-
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 FILE* UnshieldFileOpen(
     const std::filesystem::path& filenamepath,
@@ -52,10 +50,10 @@ FILE* UnshieldFileOpen(
 }
 #endif
 
-static FileDescriptor* unshield_read_file_descriptor(Unshield* unshield, int index)
+FileDescriptor* Unshield::unshield_read_file_descriptor(size_t index)
 {
   /* XXX: multi-volume support... */
-  Header* header = unshield->header_list;
+  Header* header = this->header_list;
   uint8_t* p = NULL;
   uint8_t* saved_p = NULL;
   FileDescriptor* fd = new FileDescriptor;
@@ -70,7 +68,7 @@ static FileDescriptor* unshield_read_file_descriptor(Unshield* unshield, int ind
           header->file_table[header->cab.directory_count + index];
 
 #if VERBOSE
-      unshield_trace(L"File descriptor offset %i: %08x", index, p - header->data);
+      unshield_trace(L"File descriptor offset %lld: %08x", index, p - header->data);
 #endif
  
       fd->volume            = header->index;
@@ -118,7 +116,7 @@ static FileDescriptor* unshield_read_file_descriptor(Unshield* unshield, int ind
           ((size_t)index) * 0x57;
       
 #if VERBOSE
-      unshield_trace(L"File descriptor offset: %08x", p - header->data);
+      unshield_trace(L"File descriptor offset: 0x%llx", p - header->data);
 #endif
       fd->flags             = READ_UINT16(p); p += 2;
       fd->expanded_size     = READ_UINT32(p); p += 4;
@@ -163,49 +161,41 @@ static FileDescriptor* unshield_read_file_descriptor(Unshield* unshield, int ind
   return fd;
 }
 
-static FileDescriptor* unshield_get_file_descriptor(Unshield* unshield, int index)
+FileDescriptor* Unshield::unshield_get_file_descriptor(size_t index)
 {
   /* XXX: multi-volume support... */
-  Header* header = unshield->header_list;
+  Header* header = this->header_list;
 
-  if (index < 0 || index >= (int)header->cab.file_count)
+  if (index < 0 || index >= header->cab.file_count)
   {
     unshield_error((L"Invalid index"));
     return NULL;
   }
 
-  if (!header->file_descriptors)
-    header->file_descriptors = (FileDescriptor**)calloc(header->cab.file_count, sizeof(FileDescriptor*));
-
-  if (!header->file_descriptors) return NULL;;
+  header->file_descriptors.resize(header->cab.file_count);
 
   if (!header->file_descriptors[index])
-    header->file_descriptors[index] = unshield_read_file_descriptor(unshield, index);
+    header->file_descriptors[index] = this->unshield_read_file_descriptor(index);
 
   return header->file_descriptors[index];
 }
 
-int unshield_file_count (Unshield* unshield)/*{{{*/
+int Unshield::unshield_file_count () const
 {
-  if (unshield)
-  {
     /* XXX: multi-volume support... */
-    Header* header = unshield->header_list;
+    Header* header = this->header_list;
 
     return header->cab.file_count;
-  }
-  else
-    return -1;
 }/*}}}*/
 
-const char* unshield_file_name (Unshield* unshield, int index)/*{{{*/
+const char* Unshield::unshield_file_name (size_t index)/*{{{*/
 {
-  FileDescriptor* fd = unshield_get_file_descriptor(unshield, index);
+  FileDescriptor* fd = this->unshield_get_file_descriptor(index);
 
   if (fd)
   {
     /* XXX: multi-volume support... */
-    Header* header = unshield->header_list;
+    Header* header = this->header_list;
 
     return unshield_get_utf8_string(header, 
         header->data +
@@ -218,15 +208,15 @@ const char* unshield_file_name (Unshield* unshield, int index)/*{{{*/
   return NULL;
 }/*}}}*/
 
-bool unshield_file_is_valid(Unshield* unshield, int index)
+bool Unshield::unshield_file_is_valid(size_t index)
 {
   bool is_valid = false;
   FileDescriptor* fd;
 
-  if (index < 0 || index >= unshield_file_count(unshield))
+  if (index < 0 || index >= (size_t)this->unshield_file_count())
     goto exit;
 
-  if (!(fd = unshield_get_file_descriptor(unshield, index)))
+  if (!(fd = this->unshield_get_file_descriptor(index)))
     goto exit;
 
   if (fd->flags & FILE_INVALID)
@@ -315,19 +305,37 @@ static int unshield_uncompress_old(Byte *dest, uLong *destLen, Byte *source, uLo
     return err;
 }/*}}}*/
 
-typedef struct 
+struct UnshieldReader
 {
   Unshield*         unshield;
-  unsigned          index;
+  size_t            index;
   FileDescriptor*   file_descriptor;
   int               volume;
   FILE*             volume_file;
   VolumeHeader      volume_header;
-  unsigned          volume_bytes_left;
+  size_t            volume_bytes_left;
   unsigned          obfuscation_offset;
-} UnshieldReader;
 
-static bool unshield_reader_open_volume(UnshieldReader* reader, int volume)/*{{{*/
+  bool unshield_reader_open_volume(int volume);
+  void unshield_reader_deobfuscate(uint8_t* buffer, size_t size);
+  bool unshield_reader_read(void* buffer, size_t size);
+
+  bool unshield_reader_create(Unshield* unshield, size_t index, FileDescriptor* file_descriptor);
+  void unshield_reader_destroy();
+
+  UnshieldReader(Unshield* unshield, size_t index, FileDescriptor* file_descriptor) :
+      unshield(NULL), index(0), file_descriptor(NULL), volume(0), volume_file(NULL), volume_bytes_left(0), obfuscation_offset(0)
+  {
+      unshield_reader_create(unshield, index, file_descriptor);
+  }
+
+  ~UnshieldReader() {
+      unshield_reader_destroy();
+  }
+
+};
+
+bool UnshieldReader::unshield_reader_open_volume(int volume)
 {
   bool success = false;
   unsigned data_offset = 0;
@@ -339,10 +347,10 @@ static bool unshield_reader_open_volume(UnshieldReader* reader, int volume)/*{{{
   unshield_trace(L"Open volume %i", volume);
 #endif
   
-  FCLOSE(reader->volume_file);
+  FCLOSE(this->volume_file);
 
-  reader->volume_file = unshield_fopen_for_reading(reader->unshield, volume, CABINET_SUFFIX);
-  if (!reader->volume_file)
+  this->volume_file = unshield_fopen_for_reading(this->unshield, volume, CABINET_SUFFIX);
+  if (!this->volume_file)
   {
     unshield_error(L"Failed to open input cabinet file %i", volume);
     goto exit;
@@ -353,16 +361,16 @@ static bool unshield_reader_open_volume(UnshieldReader* reader, int volume)/*{{{
     uint8_t* p = tmp;
 
     if (COMMON_HEADER_SIZE != 
-        fread(&tmp, 1, COMMON_HEADER_SIZE, reader->volume_file))
+        fread(&tmp, 1, COMMON_HEADER_SIZE, this->volume_file))
       goto exit;
 
     if (!unshield_read_common_header(&p, &common_header))
       goto exit;
   }
  
-  memset(&reader->volume_header, 0, sizeof(VolumeHeader));
+  memset(&this->volume_header, 0, sizeof(VolumeHeader));
 
-  switch (reader->unshield->header_list->major_version)
+  switch (this->unshield->header_list->major_version)
   {
     case 0:
     case 5:
@@ -371,26 +379,26 @@ static bool unshield_reader_open_volume(UnshieldReader* reader, int volume)/*{{{
         uint8_t* p = five_header;
 
         if (VOLUME_HEADER_SIZE_V5 != 
-            fread(&five_header, 1, VOLUME_HEADER_SIZE_V5, reader->volume_file))
+            fread(&five_header, 1, VOLUME_HEADER_SIZE_V5, this->volume_file))
           goto exit;
 
-        reader->volume_header.data_offset                = READ_UINT32(p); p += 4;
+        this->volume_header.data_offset                 = READ_UINT32(p); p += 4;
 #if VERBOSE
         if (READ_UINT32(p))
           unshield_trace(L"Unknown = %08x", READ_UINT32(p));
 #endif
-        /* unknown */                                                      p += 4;
-        reader->volume_header.first_file_index           = READ_UINT32(p); p += 4;
-        reader->volume_header.last_file_index            = READ_UINT32(p); p += 4;
-        reader->volume_header.first_file_offset          = READ_UINT32(p); p += 4;
-        reader->volume_header.first_file_size_expanded   = READ_UINT32(p); p += 4;
-        reader->volume_header.first_file_size_compressed = READ_UINT32(p); p += 4;
-        reader->volume_header.last_file_offset           = READ_UINT32(p); p += 4;
-        reader->volume_header.last_file_size_expanded    = READ_UINT32(p); p += 4;
-        reader->volume_header.last_file_size_compressed  = READ_UINT32(p); p += 4;
+        /* unknown */                                                    p += 4;
+        this->volume_header.first_file_index           = READ_UINT32(p); p += 4;
+        this->volume_header.last_file_index            = READ_UINT32(p); p += 4;
+        this->volume_header.first_file_offset          = READ_UINT32(p); p += 4;
+        this->volume_header.first_file_size_expanded   = READ_UINT32(p); p += 4;
+        this->volume_header.first_file_size_compressed = READ_UINT32(p); p += 4;
+        this->volume_header.last_file_offset           = READ_UINT32(p); p += 4;
+        this->volume_header.last_file_size_expanded    = READ_UINT32(p); p += 4;
+        this->volume_header.last_file_size_compressed  = READ_UINT32(p); p += 4;
 
-        if (reader->volume_header.last_file_offset == 0)
-          reader->volume_header.last_file_offset = INT32_MAX;
+        if (this->volume_header.last_file_offset == 0)
+          this->volume_header.last_file_offset = INT32_MAX;
       }
       break;
 
@@ -408,84 +416,84 @@ static bool unshield_reader_open_volume(UnshieldReader* reader, int volume)/*{{{
         uint8_t* p = six_header;
 
         if (VOLUME_HEADER_SIZE_V6 != 
-            fread(&six_header, 1, VOLUME_HEADER_SIZE_V6, reader->volume_file))
+            fread(&six_header, 1, VOLUME_HEADER_SIZE_V6, this->volume_file))
           goto exit;
 
-        reader->volume_header.data_offset                       = READ_UINT32(p); p += 4;
-        reader->volume_header.data_offset_high                  = READ_UINT32(p); p += 4;
-        reader->volume_header.first_file_index                  = READ_UINT32(p); p += 4;
-        reader->volume_header.last_file_index                   = READ_UINT32(p); p += 4;
-        reader->volume_header.first_file_offset                 = READ_UINT32(p); p += 4;
-        reader->volume_header.first_file_offset_high            = READ_UINT32(p); p += 4;
-        reader->volume_header.first_file_size_expanded          = READ_UINT32(p); p += 4;
-        reader->volume_header.first_file_size_expanded_high     = READ_UINT32(p); p += 4;
-        reader->volume_header.first_file_size_compressed        = READ_UINT32(p); p += 4;
-        reader->volume_header.first_file_size_compressed_high   = READ_UINT32(p); p += 4;
-        reader->volume_header.last_file_offset                  = READ_UINT32(p); p += 4;
-        reader->volume_header.last_file_offset_high             = READ_UINT32(p); p += 4;
-        reader->volume_header.last_file_size_expanded           = READ_UINT32(p); p += 4;
-        reader->volume_header.last_file_size_expanded_high      = READ_UINT32(p); p += 4;
-        reader->volume_header.last_file_size_compressed         = READ_UINT32(p); p += 4;
-        reader->volume_header.last_file_size_compressed_high    = READ_UINT32(p); p += 4;
+        this->volume_header.data_offset                       = READ_UINT32(p); p += 4;
+        this->volume_header.data_offset_high                  = READ_UINT32(p); p += 4;
+        this->volume_header.first_file_index                  = READ_UINT32(p); p += 4;
+        this->volume_header.last_file_index                   = READ_UINT32(p); p += 4;
+        this->volume_header.first_file_offset                 = READ_UINT32(p); p += 4;
+        this->volume_header.first_file_offset_high            = READ_UINT32(p); p += 4;
+        this->volume_header.first_file_size_expanded          = READ_UINT32(p); p += 4;
+        this->volume_header.first_file_size_expanded_high     = READ_UINT32(p); p += 4;
+        this->volume_header.first_file_size_compressed        = READ_UINT32(p); p += 4;
+        this->volume_header.first_file_size_compressed_high   = READ_UINT32(p); p += 4;
+        this->volume_header.last_file_offset                  = READ_UINT32(p); p += 4;
+        this->volume_header.last_file_offset_high             = READ_UINT32(p); p += 4;
+        this->volume_header.last_file_size_expanded           = READ_UINT32(p); p += 4;
+        this->volume_header.last_file_size_expanded_high      = READ_UINT32(p); p += 4;
+        this->volume_header.last_file_size_compressed         = READ_UINT32(p); p += 4;
+        this->volume_header.last_file_size_compressed_high    = READ_UINT32(p); p += 4;
       }
       break;
   }
   
 #if VERBOSE >= 2
   unshield_trace(L"First file index = %i, last file index = %i",
-      reader->volume_header.first_file_index, reader->volume_header.last_file_index);
+      this->volume_header.first_file_index, this->volume_header.last_file_index);
   unshield_trace(L"First file offset = %08x, last file offset = %08x",
-      reader->volume_header.first_file_offset, reader->volume_header.last_file_offset);
+      this->volume_header.first_file_offset, this->volume_header.last_file_offset);
 #endif
 
   /* enable support for split archives for IS5 */
-  if (reader->unshield->header_list->major_version == 5)
+  if (this->unshield->header_list->major_version == 5)
   {
-    if (reader->index < (reader->unshield->header_list->cab.file_count - 1) &&
-        reader->index == reader->volume_header.last_file_index && 
-        reader->volume_header.last_file_size_compressed != reader->file_descriptor->compressed_size)
+    if (this->index < (this->unshield->header_list->cab.file_count - 1) &&
+        this->index == this->volume_header.last_file_index && 
+        this->volume_header.last_file_size_compressed != this->file_descriptor->compressed_size)
     {
       unshield_trace(L"IS5 split file last in volume");
-      reader->file_descriptor->flags |= FILE_SPLIT;
+      this->file_descriptor->flags |= FILE_SPLIT;
     }
-    else if (reader->index > 0 &&
-        reader->index == reader->volume_header.first_file_index && 
-        reader->volume_header.first_file_size_compressed != reader->file_descriptor->compressed_size)
+    else if (this->index > 0 &&
+        this->index == this->volume_header.first_file_index && 
+        this->volume_header.first_file_size_compressed != this->file_descriptor->compressed_size)
     {
       unshield_trace(L"IS5 split file first in volume");
-      reader->file_descriptor->flags |= FILE_SPLIT;
+      this->file_descriptor->flags |= FILE_SPLIT;
     }
   }
 
-  if (reader->file_descriptor->flags & FILE_SPLIT)
+  if (this->file_descriptor->flags & FILE_SPLIT)
   {   
 #if VERBOSE
     unshield_trace(/*"Total bytes left = 0x08%x, "*/L"previous data offset = 0x08%x",
         /*total_bytes_left, */data_offset); 
 #endif
 
-    if (reader->index == reader->volume_header.last_file_index && reader->volume_header.last_file_offset != 0x7FFFFFFF)
+    if (this->index == this->volume_header.last_file_index && this->volume_header.last_file_offset != 0x7FFFFFFF)
     {
       /* can be first file too... */
 #if VERBOSE
-      unshield_trace(L"Index %i is last file in cabinet file %i",
-          reader->index, volume);
+      unshield_trace(L"Index %lld is last file in cabinet file %i",
+          this->index, volume);
 #endif
 
-      data_offset                   = reader->volume_header.last_file_offset;
-      volume_bytes_left_expanded    = reader->volume_header.last_file_size_expanded;
-      volume_bytes_left_compressed  = reader->volume_header.last_file_size_compressed;
+      data_offset                   = this->volume_header.last_file_offset;
+      volume_bytes_left_expanded    = this->volume_header.last_file_size_expanded;
+      volume_bytes_left_compressed  = this->volume_header.last_file_size_compressed;
     }
-    else if (reader->index == reader->volume_header.first_file_index)
+    else if (this->index == this->volume_header.first_file_index)
     {
 #if VERBOSE
-      unshield_trace(L"Index %i is first file in cabinet file %i",
-          reader->index, volume);
+      unshield_trace(L"Index %lld is first file in cabinet file %i",
+          this->index, volume);
 #endif
 
-      data_offset                   = reader->volume_header.first_file_offset;
-      volume_bytes_left_expanded    = reader->volume_header.first_file_size_expanded;
-      volume_bytes_left_compressed  = reader->volume_header.first_file_size_compressed;
+      data_offset                   = this->volume_header.first_file_offset;
+      volume_bytes_left_expanded    = this->volume_header.first_file_size_expanded;
+      volume_bytes_left_compressed  = this->volume_header.first_file_size_compressed;
     }
     else
     {
@@ -500,19 +508,19 @@ static bool unshield_reader_open_volume(UnshieldReader* reader, int volume)/*{{{
   }
   else
   {
-    data_offset                  = reader->file_descriptor->data_offset;
-    volume_bytes_left_expanded   = reader->file_descriptor->expanded_size;
-    volume_bytes_left_compressed = reader->file_descriptor->compressed_size;
+    data_offset                  = this->file_descriptor->data_offset;
+    volume_bytes_left_expanded   = this->file_descriptor->expanded_size;
+    volume_bytes_left_compressed = this->file_descriptor->compressed_size;
   }
 
-  if (reader->file_descriptor->flags & FILE_COMPRESSED)
-    reader->volume_bytes_left = volume_bytes_left_compressed;
+  if (this->file_descriptor->flags & FILE_COMPRESSED)
+    this->volume_bytes_left = volume_bytes_left_compressed;
   else
-    reader->volume_bytes_left = volume_bytes_left_expanded;
+    this->volume_bytes_left = volume_bytes_left_expanded;
 
-  fseek(reader->volume_file, data_offset, SEEK_SET);
+  fseek(this->volume_file, data_offset, SEEK_SET);
 
-  reader->volume = volume;
+  this->volume = volume;
   success = true;
 
 exit:
@@ -531,20 +539,20 @@ void unshield_deobfuscate(unsigned char* buffer, size_t size, unsigned* seed)
   *seed = tmp_seed;
 }
 
-static void unshield_reader_deobfuscate(UnshieldReader* reader, uint8_t* buffer, size_t size)
+void UnshieldReader::unshield_reader_deobfuscate(uint8_t* buffer, size_t size)
 {
-  unshield_deobfuscate(buffer, size, &reader->obfuscation_offset);
+  unshield_deobfuscate(buffer, size, &this->obfuscation_offset);
 }
 
-static bool unshield_reader_read(UnshieldReader* reader, void* buffer, size_t size)/*{{{*/
+bool UnshieldReader::unshield_reader_read(void* buffer, size_t size)
 {
   bool success = false;
   uint8_t* p = (uint8_t*)buffer;
   size_t bytes_left = size;
 
 #if VERBOSE >= 3
-    unshield_trace(L"unshield_reader_read start: bytes_left = 0x%x, volume_bytes_left = 0x%x", 
-        bytes_left, reader->volume_bytes_left);
+    unshield_trace(L"unshield_reader_read start: bytes_left = 0x%llx, volume_bytes_left = 0x%llx", 
+        bytes_left, this->volume_bytes_left);
 #endif
 
   for (;;)
@@ -552,11 +560,11 @@ static bool unshield_reader_read(UnshieldReader* reader, void* buffer, size_t si
     /* 
        Read as much as possible from this volume
      */
-    size_t bytes_to_read = std::min<size_t>(bytes_left, reader->volume_bytes_left);
+    size_t bytes_to_read = std::min<size_t>(bytes_left, this->volume_bytes_left);
 
 #if VERBOSE >= 3
-    unshield_trace(L"Trying to read 0x%x bytes from offset %08x in volume %i", 
-        bytes_to_read, ftell(reader->volume_file), reader->volume);
+    unshield_trace(L"Trying to read 0x%llx bytes from offset %08x in volume %i", 
+        bytes_to_read, ftell(this->volume_file), this->volume);
 #endif
     if (bytes_to_read == 0)
     {
@@ -564,21 +572,21 @@ static bool unshield_reader_read(UnshieldReader* reader, void* buffer, size_t si
         goto exit;
     }
 
-    if (bytes_to_read != fread(p, 1, bytes_to_read, reader->volume_file))
+    if (bytes_to_read != fread(p, 1, bytes_to_read, this->volume_file))
     {
-      unshield_error(L"Failed to read 0x%08x bytes of file %i (%s) from volume %i. Current offset = 0x%08x",
-          bytes_to_read, reader->index, 
-          unshield_file_name(reader->unshield, reader->index), reader->volume,
-          ftell(reader->volume_file));
+      unshield_error(L"Failed to read 0x%08llx bytes of file %lld (%s) from volume %i. Current offset = 0x%08x",
+          bytes_to_read, this->index, 
+          this->unshield->unshield_file_name(this->index), this->volume,
+          ftell(this->volume_file));
       goto exit;
     }
 
     bytes_left -= bytes_to_read;
-    reader->volume_bytes_left -= (unsigned)bytes_to_read;
+    this->volume_bytes_left -= bytes_to_read;
 
 #if VERBOSE >= 3
-    unshield_trace(L"bytes_left = %i, volume_bytes_left = %i", 
-        bytes_left, reader->volume_bytes_left);
+    unshield_trace(L"bytes_left = %lld, volume_bytes_left = %lld", 
+        bytes_left, this->volume_bytes_left);
 #endif
 
     if (!bytes_left)
@@ -590,16 +598,16 @@ static bool unshield_reader_read(UnshieldReader* reader, void* buffer, size_t si
        Open next volume
      */
 
-    if (!unshield_reader_open_volume(reader, reader->volume + 1))
+    if (!this->unshield_reader_open_volume(this->volume + 1))
     {
       unshield_error(L"Failed to open volume %i to read %i more bytes",
-          reader->volume + 1, bytes_to_read);
+          this->volume + 1, bytes_to_read);
       goto exit;
     }
   }
 
-  if (reader->file_descriptor->flags & FILE_OBFUSCATED)
-    unshield_reader_deobfuscate(reader, (uint8_t*)buffer, size);
+  if (this->file_descriptor->flags & FILE_OBFUSCATED)
+    this->unshield_reader_deobfuscate((uint8_t*)buffer, size);
 
   success = true;
 
@@ -607,24 +615,20 @@ exit:
   return success;
 }/*}}}*/
 
-static UnshieldReader* unshield_reader_create(/*{{{*/
+bool UnshieldReader::unshield_reader_create(
     Unshield* unshield, 
-    int index,
+    size_t index,
     FileDescriptor* file_descriptor)
 {
   bool success = false;
   
-  UnshieldReader* reader = NEW1(UnshieldReader);
-  if (!reader)
-    return NULL;
-
-  reader->unshield          = unshield;
-  reader->index             = index;
-  reader->file_descriptor   = file_descriptor;
+  this->unshield          = unshield;
+  this->index             = index;
+  this->file_descriptor   = file_descriptor;
 
   for (;;)
   {
-    if (!unshield_reader_open_volume(reader, file_descriptor->volume))
+    if (!this->unshield_reader_open_volume(file_descriptor->volume))
     {
       unshield_error(L"Failed to open volume %i",
           file_descriptor->volume);
@@ -632,8 +636,8 @@ static UnshieldReader* unshield_reader_create(/*{{{*/
     }
 
     /* Start with the correct volume for IS5 cabinets */
-    if (reader->unshield->header_list->major_version <= 5 &&
-        index > (int)reader->volume_header.last_file_index)
+    if (this->unshield->header_list->major_version <= 5 &&
+        index > this->volume_header.last_file_index)
     {
       unshield_trace(L"Trying next volume...");
       file_descriptor->volume++;
@@ -646,33 +650,26 @@ static UnshieldReader* unshield_reader_create(/*{{{*/
   success = true;
 
 exit:
-  if (success)
-    return reader;
 
-  FREE(reader);
-  return NULL;
-}/*}}}*/
+  return success;
+}
 
-static void unshield_reader_destroy(UnshieldReader* reader)/*{{{*/
+void UnshieldReader::unshield_reader_destroy()
 {
-  if (reader)
-  {
-    FCLOSE(reader->volume_file);
-    free(reader);
-  }
-}/*}}}*/
+    FCLOSE(this->volume_file);
+}
 
 #define BUFFER_SIZE (64*1024)
 
 /*
  * If filename is NULL, just throw away the result
  */
-bool unshield_file_save (Unshield* unshield, int index, const std::filesystem::path &filenamepath)/*{{{*/
+bool Unshield::unshield_file_save (size_t index, const std::filesystem::path &filenamepath)/*{{{*/
 {
   bool success = false;
   FILE* output = NULL;
-  unsigned char* input_buffer   = (unsigned char*)malloc(BUFFER_SIZE+1);
-  unsigned char* output_buffer  = (unsigned char*)malloc(BUFFER_SIZE);
+  unsigned char* input_buffer   = new unsigned char[BUFFER_SIZE+1];
+  unsigned char* output_buffer  = new unsigned char [BUFFER_SIZE];
 
   unsigned int bytes_left;
   uLong total_written = 0;
@@ -685,10 +682,7 @@ bool unshield_file_save (Unshield* unshield, int index, const std::filesystem::p
   if (!input_buffer || !output_buffer)
     goto exit;
 
-  if (!unshield)
-    goto exit;
-
-  if (!(file_descriptor = unshield_get_file_descriptor(unshield, index)))
+  if (!(file_descriptor = this->unshield_get_file_descriptor(index)))
   {
     unshield_error(L"Failed to get file descriptor for file %i", index);
     goto exit;
@@ -702,11 +696,11 @@ bool unshield_file_save (Unshield* unshield, int index, const std::filesystem::p
 
   if (file_descriptor->link_flags & LINK_PREV)
   {
-    success = unshield_file_save(unshield, file_descriptor->link_previous, filenamepath);
+    success = this->unshield_file_save(file_descriptor->link_previous, filenamepath);
     goto exit;
   }
 
-  reader = unshield_reader_create(unshield, index, file_descriptor);
+  reader = new UnshieldReader(this, index, file_descriptor);
   if (!reader)
   {
     unshield_error(L"Failed to create data reader for file %i", index);
@@ -746,10 +740,10 @@ bool unshield_file_save (Unshield* unshield, int index, const std::filesystem::p
       uLong read_bytes;
       uint16_t bytes_to_read = 0;
 
-      if (!unshield_reader_read(reader, &bytes_to_read, sizeof(bytes_to_read)))
+      if (!reader->unshield_reader_read(&bytes_to_read, sizeof(bytes_to_read)))
       {
         unshield_error(L"Failed to read %i bytes of file %i (%s) from input cabinet file %i", 
-            sizeof(bytes_to_read), index, unshield_file_name(unshield, index), file_descriptor->volume);
+            sizeof(bytes_to_read), index, this->unshield_file_name(index), file_descriptor->volume);
         goto exit;
       }
 
@@ -761,11 +755,11 @@ bool unshield_file_save (Unshield* unshield, int index, const std::filesystem::p
           goto exit;
       }
 
-      if (!unshield_reader_read(reader, input_buffer, bytes_to_read))
+      if (!reader->unshield_reader_read(input_buffer, bytes_to_read))
       {
 #if VERBOSE
         unshield_error(L"Failed to read %i bytes of file %i (%s) from input cabinet file %i", 
-            bytes_to_read, index, unshield_file_name(unshield, index), file_descriptor->volume);
+            bytes_to_read, index, this->unshield_file_name(index), file_descriptor->volume);
 #endif
         goto exit;
       }
@@ -798,7 +792,7 @@ bool unshield_file_save (Unshield* unshield, int index, const std::filesystem::p
     {
       bytes_to_write = (uLong)std::min<size_t>(bytes_left, BUFFER_SIZE);
 
-      if (!unshield_reader_read(reader, output_buffer, bytes_to_write))
+      if (!reader->unshield_reader_read(output_buffer, bytes_to_write))
       {
 #if VERBOSE
         unshield_error(L"Failed to read %i bytes from input cabinet file %i", 
@@ -831,7 +825,7 @@ bool unshield_file_save (Unshield* unshield, int index, const std::filesystem::p
     goto exit;
   }
 
-  if (unshield->header_list->major_version >= 6)
+  if (this->header_list->major_version >= 6)
   {
     unsigned char md5result[16];
     MD5Final(md5result, &md5);
@@ -839,7 +833,7 @@ bool unshield_file_save (Unshield* unshield, int index, const std::filesystem::p
     if (0 != memcmp(md5result, file_descriptor->md5, 16))
     {
       unshield_error(L"MD5 checksum failure for file %i (%s)", 
-          index, unshield_file_name(unshield, index));
+          index, this->unshield_file_name(index));
       goto exit;
     }
   }
@@ -847,16 +841,16 @@ bool unshield_file_save (Unshield* unshield, int index, const std::filesystem::p
   success = true;
   
 exit:
-  unshield_reader_destroy(reader);
+  delete reader;
   FCLOSE(output);
-  FREE(input_buffer);
-  FREE(output_buffer);
+  delete [] input_buffer;
+  delete [] output_buffer;
   return success;
-}/*}}}*/
+}
 
-int unshield_file_directory(Unshield* unshield, int index)/*{{{*/
+int Unshield::unshield_file_directory(size_t index)/*{{{*/
 {
-  FileDescriptor* fd = unshield_get_file_descriptor(unshield, index);
+  FileDescriptor* fd = this->unshield_get_file_descriptor(index);
   if (fd)
   {
     return fd->directory_index;
@@ -865,9 +859,9 @@ int unshield_file_directory(Unshield* unshield, int index)/*{{{*/
     return -1;
 }/*}}}*/
 
-size_t unshield_file_size(Unshield* unshield, int index)/*{{{*/
+size_t Unshield::unshield_file_size(size_t index)
 {
-  FileDescriptor* fd = unshield_get_file_descriptor(unshield, index);
+  FileDescriptor* fd = this->unshield_get_file_descriptor(index);
   if (fd)
   {
     return fd->expanded_size;
@@ -876,13 +870,13 @@ size_t unshield_file_size(Unshield* unshield, int index)/*{{{*/
     return 0;
 }/*}}}*/
 
-bool unshield_file_save_raw(Unshield* unshield, int index, const std::filesystem::path& filenamepath)
+bool Unshield::unshield_file_save_raw(size_t index, const std::filesystem::path& filenamepath)
 {
   /* XXX: Thou Shalt Not Cut & Paste... */
   bool success = false;
   FILE* output = NULL;
-  unsigned char* input_buffer   = (unsigned char*)malloc(BUFFER_SIZE);
-  unsigned char* output_buffer  = (unsigned char*)malloc(BUFFER_SIZE);
+  unsigned char* input_buffer   = new unsigned char[BUFFER_SIZE];
+  unsigned char* output_buffer  = new unsigned char[BUFFER_SIZE];
 
   unsigned int bytes_left;
   UnshieldReader* reader = NULL;
@@ -891,10 +885,7 @@ bool unshield_file_save_raw(Unshield* unshield, int index, const std::filesystem
   if (!input_buffer) goto exit;
   if (!output_buffer) goto exit;
 
-  if (!unshield)
-    goto exit;
-
-  if (!(file_descriptor = unshield_get_file_descriptor(unshield, index)))
+  if (!(file_descriptor = this->unshield_get_file_descriptor(index)))
   {
     unshield_error(L"Failed to get file descriptor for file %i", index);
     goto exit;
@@ -908,11 +899,11 @@ bool unshield_file_save_raw(Unshield* unshield, int index, const std::filesystem
 
   if (file_descriptor->link_flags & LINK_PREV)
   {
-    success = unshield_file_save_raw(unshield, file_descriptor->link_previous, filenamepath);
+    success = this->unshield_file_save_raw(file_descriptor->link_previous, filenamepath);
     goto exit;
   }
 
-  reader = unshield_reader_create(unshield, index, file_descriptor);
+  reader = new UnshieldReader(this, index, file_descriptor);
   if (!reader)
   {
     unshield_error(L"Failed to create data reader for file %i", index);
@@ -948,7 +939,7 @@ bool unshield_file_save_raw(Unshield* unshield, int index, const std::filesystem
   {
     uLong bytes_to_write = (uLong)std::min<size_t>(bytes_left, BUFFER_SIZE);
 
-    if (!unshield_reader_read(reader, output_buffer, bytes_to_write))
+    if (!reader->unshield_reader_read(output_buffer, bytes_to_write))
     {
 #if VERBOSE
       unshield_error(L"Failed to read %i bytes from input cabinet file %i", 
@@ -969,14 +960,13 @@ bool unshield_file_save_raw(Unshield* unshield, int index, const std::filesystem
   success = true;
   
 exit:
-  if (reader)
-      unshield_reader_destroy(reader);
+  delete reader;
+
   if (output)
       FCLOSE(output);
-  if (input_buffer)
-      FREE(input_buffer);
-  if (output_buffer)
-      FREE(output_buffer);
+
+  delete[] input_buffer;
+  delete[] output_buffer;
 
   return success;
 }
@@ -1002,23 +992,25 @@ static uint8_t* find_bytes(
   return NULL;
 }
 
-bool unshield_file_save_old(Unshield* unshield, int index, const std::filesystem::path& filenamepath)/*{{{*/
+bool Unshield::unshield_file_save_old(size_t index, const std::filesystem::path& filenamepath)/*{{{*/
 {
   /* XXX: Thou Shalt Not Cut & Paste... */
   bool success = false;
   FILE* output = NULL;
   size_t input_buffer_size = BUFFER_SIZE;
-  unsigned char* input_buffer   = (unsigned char*)malloc(BUFFER_SIZE);
-  unsigned char* output_buffer  = (unsigned char*)malloc(BUFFER_SIZE);
+
+  std::vector<unsigned char> input_buffer;
+  input_buffer.resize(BUFFER_SIZE);
+
+  std::vector<unsigned char> output_buffer;
+  output_buffer.resize(BUFFER_SIZE);
+
   unsigned int bytes_left;
   uLong total_written = 0;
   UnshieldReader* reader = NULL;
   FileDescriptor* file_descriptor;
 
-  if (!unshield)
-    goto exit;
-
-  if (!(file_descriptor = unshield_get_file_descriptor(unshield, index)))
+  if (!(file_descriptor = this->unshield_get_file_descriptor(index)))
   {
     unshield_error(L"Failed to get file descriptor for file %i", index);
     goto exit;
@@ -1032,11 +1024,11 @@ bool unshield_file_save_old(Unshield* unshield, int index, const std::filesystem
 
   if (file_descriptor->link_flags & LINK_PREV)
   {
-    success = unshield_file_save(unshield, file_descriptor->link_previous, filenamepath);
+    success = this->unshield_file_save(file_descriptor->link_previous, filenamepath);
     goto exit;
   }
 
-  reader = unshield_reader_create(unshield, index, file_descriptor);
+  reader = new UnshieldReader(this, index, file_descriptor);
   if (!reader)
   {
     unshield_error(L"Failed to create data reader for file %i", index);
@@ -1071,7 +1063,7 @@ bool unshield_file_save_old(Unshield* unshield, int index, const std::filesystem
     uLong bytes_to_write = 0;
     int result;
 
-    if (reader->volume_bytes_left == 0 && !unshield_reader_open_volume(reader, reader->volume + 1))
+    if (reader->volume_bytes_left == 0 && !reader->unshield_reader_open_volume(reader->volume + 1))
     {
         unshield_error(L"Failed to open volume %i to read %i more bytes",
             reader->volume + 1, bytes_left);
@@ -1085,36 +1077,34 @@ bool unshield_file_save_old(Unshield* unshield, int index, const std::filesystem
       size_t input_size = reader->volume_bytes_left;
       uint8_t* chunk_buffer;
 
-      while (input_size > input_buffer_size) 
+      while (input_size > input_buffer.size()) 
       {
-        input_buffer_size *= 2;
 #if VERBOSE >= 3
-        unshield_trace(L"increased input_buffer_size to 0x%x", input_buffer_size);
+        unshield_trace(L"increased input_buffer_size to 0x%llx", input_buffer_size);
 #endif
 
-        input_buffer = (unsigned char*)UnshieldRealloc(input_buffer, input_buffer_size);
-        assert(input_buffer);
+        input_buffer.resize(input_buffer.size() * 2);
       }
 
-      if (!unshield_reader_read(reader, input_buffer, input_size))
+      if (!reader->unshield_reader_read(input_buffer.data(), input_size))
       {
 #if VERBOSE
         unshield_error(L"Failed to read 0x%x bytes of file %i (%s) from input cabinet file %i", 
-            input_size, index, unshield_file_name(unshield, index), file_descriptor->volume);
+            input_size, index, this->unshield_file_name(index), file_descriptor->volume);
 #endif
         goto exit;
       }
 
       bytes_left -= (unsigned)input_size;
 
-      for (chunk_buffer = input_buffer; input_size; )
+      for (chunk_buffer = input_buffer.data(); input_size; )
       {
         size_t chunk_size;
         uint8_t* match = find_bytes(chunk_buffer, input_size, END_OF_CHUNK, sizeof(END_OF_CHUNK));
         if (!match)
         {
           unshield_error(L"Could not find end of chunk for file %i (%s) from input cabinet file %i", 
-              index, unshield_file_name(unshield, index), file_descriptor->volume);
+              index, this->unshield_file_name(index), file_descriptor->volume);
           goto exit;
         }
 
@@ -1141,14 +1131,14 @@ bool unshield_file_save_old(Unshield* unshield, int index, const std::filesystem
             if (!match)
             {
                 unshield_error(L"Could not find end of chunk for file %i (%s) from input cabinet file %i",
-                    index, unshield_file_name(unshield, index), file_descriptor->volume);
+                    index, this->unshield_file_name(index), file_descriptor->volume);
                 goto exit;
             }
             chunk_size = match - chunk_buffer;
         }
 
 #if VERBOSE >= 3
-        unshield_trace(L"chunk_size = 0x%x", chunk_size);
+        unshield_trace(L"chunk_size = 0x%llx", chunk_size);
 #endif
 
         /* add a null byte to make inflate happy */
@@ -1156,7 +1146,7 @@ bool unshield_file_save_old(Unshield* unshield, int index, const std::filesystem
 
         bytes_to_write = BUFFER_SIZE;
         read_bytes = (uLong)chunk_size;
-        result = unshield_uncompress_old(output_buffer, &bytes_to_write, chunk_buffer, &read_bytes);
+        result = unshield_uncompress_old(output_buffer.data(), &bytes_to_write, chunk_buffer, &read_bytes);
 
         if (Z_OK != result)
         {
@@ -1176,7 +1166,7 @@ bool unshield_file_save_old(Unshield* unshield, int index, const std::filesystem
         input_size -= sizeof(END_OF_CHUNK);
 
         if (output)
-          if (bytes_to_write != fwrite(output_buffer, 1, bytes_to_write, output))
+          if (bytes_to_write != fwrite(output_buffer.data(), 1, bytes_to_write, output))
           {
             unshield_error(L"Failed to write %i bytes to file '%s'", bytes_to_write, filenamepath.c_str());
             goto exit;
@@ -1189,7 +1179,7 @@ bool unshield_file_save_old(Unshield* unshield, int index, const std::filesystem
     {
       bytes_to_write = (uLong)std::min<size_t>(bytes_left, BUFFER_SIZE);
 
-      if (!unshield_reader_read(reader, output_buffer, bytes_to_write))
+      if (!reader->unshield_reader_read(output_buffer.data(), bytes_to_write))
       {
 #if VERBOSE
         unshield_error(L"Failed to read %i bytes from input cabinet file %i", 
@@ -1201,7 +1191,7 @@ bool unshield_file_save_old(Unshield* unshield, int index, const std::filesystem
       bytes_left -= bytes_to_write;
 
       if (output)
-        if (bytes_to_write != fwrite(output_buffer, 1, bytes_to_write, output))
+        if (bytes_to_write != fwrite(output_buffer.data(), 1, bytes_to_write, output))
         {
           unshield_error(L"Failed to write %i bytes to file '%s'", bytes_to_write, filenamepath.c_str());
           goto exit;
@@ -1221,10 +1211,8 @@ bool unshield_file_save_old(Unshield* unshield, int index, const std::filesystem
   success = true;
   
 exit:
-  unshield_reader_destroy(reader);
+  delete reader;
   FCLOSE(output);
-  FREE(input_buffer);
-  FREE(output_buffer);
   return success;
 }/*}}}*/
 
