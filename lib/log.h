@@ -27,13 +27,13 @@ void Unshield_log(int level, const wchar_t* file, int line, const wchar_t* forma
 #if 1
 
 #define unshield_trace(format, ...) \
-	Unshield_log(UNSHIELD_LOG_LEVEL_TRACE,__FUNCTIONW__, __LINE__, format, ##__VA_ARGS__)
+    Unshield_log(UNSHIELD_LOG_LEVEL_TRACE,__FUNCTIONW__, __LINE__, format, ##__VA_ARGS__)
 
 #define unshield_warning(format, ...) \
-	Unshield_log(UNSHIELD_LOG_LEVEL_WARNING,__FUNCTIONW__, __LINE__, format, ##__VA_ARGS__)
+    Unshield_log(UNSHIELD_LOG_LEVEL_WARNING,__FUNCTIONW__, __LINE__, format, ##__VA_ARGS__)
 
 #define unshield_error(format, ...) \
-	Unshield_log(UNSHIELD_LOG_LEVEL_ERROR,__FUNCTIONW__, __LINE__, format, ##__VA_ARGS__)
+    Unshield_log(UNSHIELD_LOG_LEVEL_ERROR,__FUNCTIONW__, __LINE__, format, ##__VA_ARGS__)
 
 #else
 

@@ -24,74 +24,74 @@
 template <typename T>
 bool iequals(T& a, T& b)
 {
-	return std::equal(a.begin(), a.end(),
-		b.begin(), b.end(),
-		[](wchar_t a, wchar_t b) {
-			return std::tolower(a) == std::tolower(b);
-		});
+    return std::equal(a.begin(), a.end(),
+        b.begin(), b.end(),
+        [](wchar_t a, wchar_t b) {
+            return std::tolower(a) == std::tolower(b);
+        });
 }
 
 FILE* unshield_fopen_for_reading(Unshield* unshield, int index, const char* suffix)
 {
-	FILE* result = NULL;
+    FILE* result = NULL;
 
-	if (unshield && !unshield->filename_path.empty())
-	{
-		std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+    if (unshield && !unshield->filename_path.empty())
+    {
+        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
 
-		// Construct directory from path.
-		std::filesystem::path dirpath = unshield->filename_path;
-		dirpath.remove_filename();
-		if (dirpath.empty()) dirpath.append(".");
+        // Construct directory from path.
+        std::filesystem::path dirpath = unshield->filename_path;
+        dirpath.remove_filename();
+        if (dirpath.empty()) dirpath.append(".");
 
-		// Construct filename from path and index and suffix.
-		std::filesystem::path filepath = unshield->filename_path.filename();
-		std::wstring filename = filepath.c_str() + std::to_wstring(index) + L"." + converter.from_bytes(suffix);
+        // Construct filename from path and index and suffix.
+        std::filesystem::path filepath = unshield->filename_path.filename();
+        std::wstring filename = filepath.c_str() + std::to_wstring(index) + L"." + converter.from_bytes(suffix);
 
-		std::filesystem::path filenamepath;
+        std::filesystem::path filenamepath;
 
-		_WDIR* sourcedir = _wopendir(dirpath.make_preferred().c_str());
+        _WDIR* sourcedir = _wopendir(dirpath.make_preferred().c_str());
 
-		if (sourcedir)
-		{
-			struct _wdirent* dent = NULL;
+        if (sourcedir)
+        {
+            struct _wdirent* dent = NULL;
 
-			for (dent = _wreaddir(sourcedir); dent; dent = _wreaddir(sourcedir))
-			{
+            for (dent = _wreaddir(sourcedir); dent; dent = _wreaddir(sourcedir))
+            {
                 std::wstring d_name_string(dent->d_name);
-				if (iequals(d_name_string, filename))
-				{
-					/*unshield_trace(L"Found match %s\n",converter.to_bytes(dent->d_name));*/
-					break;
-				}
-			}
+                if (iequals(d_name_string, filename))
+                {
+                    /*unshield_trace(L"Found match %s\n",converter.to_bytes(dent->d_name));*/
+                    break;
+                }
+            }
 
-			if (dent == NULL)
-			{
-				unshield_trace(L"File %s not found even case insensitive\n", converter.to_bytes(filename.c_str()));
-				goto exit;
-			}
-			else {
-				filenamepath = dirpath.append(dent->d_name);
-			}
-		}
-		else
-			unshield_trace(L"Could not open directory %s error %s\n", converter.to_bytes(dirpath.c_str()), strerror(errno));
+            if (dent == NULL)
+            {
+                unshield_trace(L"File %s not found even case insensitive\n", converter.to_bytes(filename.c_str()));
+                goto exit;
+            }
+            else {
+                filenamepath = dirpath.append(dent->d_name);
+            }
+        }
+        else
+            unshield_trace(L"Could not open directory %s error %s\n", converter.to_bytes(dirpath.c_str()), strerror(errno));
 
-		if (!filenamepath.empty())
-		{
+        if (!filenamepath.empty())
+        {
 #if VERBOSE
-			unshield_trace(L"Opening file '%s'", converter.to_bytes(filenamepath.c_str()));
+            unshield_trace(L"Opening file '%s'", converter.to_bytes(filenamepath.c_str()));
 #endif
-			result = _wfopen(filenamepath.c_str(), L"rb");
-		}
+            result = _wfopen(filenamepath.c_str(), L"rb");
+        }
 
-	exit:
-		if (sourcedir)
-			_wclosedir(sourcedir);
-	}
+    exit:
+        if (sourcedir)
+            _wclosedir(sourcedir);
+    }
 
-	return result;
+    return result;
 }
 
 long unshield_fsize(FILE* file)
@@ -174,8 +174,8 @@ static const char* unshield_utf16_to_utf8(Header* header, const uint16_t* utf16)
   char* target = string_buffer->string = new char[buffer_size];
   ConversionResult result = ConvertUTF16toUTF8(
       (const UTF16**)&utf16, utf16 + length + 1, 
-      (UTF8**)&target, (UTF8*)(target + buffer_size), lenientConversion);
-  if (result != conversionOK)
+      (UTF8**)&target, (UTF8*)(target + buffer_size), ConversionFlags::lenientConversion);
+  if (result != ConversionResult::conversionOK)
   {
     /* fail fast */
     abort();
