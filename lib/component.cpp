@@ -67,7 +67,5 @@ UnshieldComponent::UnshieldComponent(Header* header, uint32_t offset)
 
 UnshieldComponent::~UnshieldComponent()
 {
-	delete[] this->file_group_names;
+    delete[] this->file_group_names;
 }
-
-

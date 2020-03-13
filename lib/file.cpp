@@ -68,7 +68,7 @@ FileDescriptor* Unshield::unshield_read_file_descriptor(size_t index)
           header->file_table[header->cab.directory_count + index];
 
 #if VERBOSE
-      unshield_trace(L"File descriptor offset %lld: %08x", index, p - header->data);
+      unshield_trace(L"File descriptor offset %zd: %08p", index, p - header->data);
 #endif
  
       fd->volume            = header->index;
@@ -116,7 +116,7 @@ FileDescriptor* Unshield::unshield_read_file_descriptor(size_t index)
           ((size_t)index) * 0x57;
       
 #if VERBOSE
-      unshield_trace(L"File descriptor offset: 0x%llx", p - header->data);
+      unshield_trace(L"File descriptor offset: 0x%zx", p - header->data);
 #endif
       fd->flags             = READ_UINT16(p); p += 2;
       fd->expanded_size     = READ_UINT32(p); p += 4;
@@ -476,7 +476,7 @@ bool UnshieldReader::unshield_reader_open_volume(int volume)
     {
       /* can be first file too... */
 #if VERBOSE
-      unshield_trace(L"Index %lld is last file in cabinet file %i",
+      unshield_trace(L"Index %zd is last file in cabinet file %i",
           this->index, volume);
 #endif
 
@@ -487,7 +487,7 @@ bool UnshieldReader::unshield_reader_open_volume(int volume)
     else if (this->index == this->volume_header.first_file_index)
     {
 #if VERBOSE
-      unshield_trace(L"Index %lld is first file in cabinet file %i",
+      unshield_trace(L"Index %zd is first file in cabinet file %i",
           this->index, volume);
 #endif
 
@@ -551,7 +551,7 @@ bool UnshieldReader::unshield_reader_read(void* buffer, size_t size)
   size_t bytes_left = size;
 
 #if VERBOSE >= 3
-    unshield_trace(L"unshield_reader_read start: bytes_left = 0x%llx, volume_bytes_left = 0x%llx", 
+    unshield_trace(L"unshield_reader_read start: bytes_left = %zd, volume_bytes_left = %zd", 
         bytes_left, this->volume_bytes_left);
 #endif
 
@@ -563,7 +563,7 @@ bool UnshieldReader::unshield_reader_read(void* buffer, size_t size)
     size_t bytes_to_read = std::min<size_t>(bytes_left, this->volume_bytes_left);
 
 #if VERBOSE >= 3
-    unshield_trace(L"Trying to read 0x%llx bytes from offset %08x in volume %i", 
+    unshield_trace(L"Trying to read %zd bytes from offset %zd in volume %i", 
         bytes_to_read, ftell(this->volume_file), this->volume);
 #endif
     if (bytes_to_read == 0)
@@ -574,7 +574,7 @@ bool UnshieldReader::unshield_reader_read(void* buffer, size_t size)
 
     if (bytes_to_read != fread(p, 1, bytes_to_read, this->volume_file))
     {
-      unshield_error(L"Failed to read 0x%08llx bytes of file %lld (%s) from volume %i. Current offset = 0x%08x",
+      unshield_error(L"Failed to read 0x%08zx bytes of file %zd (%s) from volume %i. Current offset = 0x%08x",
           bytes_to_read, this->index, 
           this->unshield->unshield_file_name(this->index), this->volume,
           ftell(this->volume_file));
@@ -585,7 +585,7 @@ bool UnshieldReader::unshield_reader_read(void* buffer, size_t size)
     this->volume_bytes_left -= bytes_to_read;
 
 #if VERBOSE >= 3
-    unshield_trace(L"bytes_left = %lld, volume_bytes_left = %lld", 
+    unshield_trace(L"bytes_left = %zd, volume_bytes_left = %zd", 
         bytes_left, this->volume_bytes_left);
 #endif
 
@@ -924,8 +924,8 @@ bool Unshield::unshield_file_save_raw(size_t index, const std::filesystem::path&
   output = UnshieldFileOpen(filenamepath, L"wb");
   if (!output)
   {
-	  unshield_error(L"Failed to open output file '%s'", filenamepath.c_str());
-	  goto exit;
+      unshield_error(L"Failed to open output file '%s'", filenamepath.c_str());
+      goto exit;
   }
 
   if (file_descriptor->flags & FILE_COMPRESSED)
@@ -1080,7 +1080,7 @@ bool Unshield::unshield_file_save_old(size_t index, const std::filesystem::path&
       while (input_size > input_buffer.size()) 
       {
 #if VERBOSE >= 3
-        unshield_trace(L"increased input_buffer_size to 0x%llx", input_buffer_size);
+        unshield_trace(L"increased input_buffer_size to %zd", input_buffer_size);
 #endif
 
         input_buffer.resize(input_buffer.size() * 2);
@@ -1138,7 +1138,7 @@ bool Unshield::unshield_file_save_old(size_t index, const std::filesystem::path&
         }
 
 #if VERBOSE >= 3
-        unshield_trace(L"chunk_size = 0x%llx", chunk_size);
+        unshield_trace(L"chunk_size = %zd", chunk_size);
 #endif
 
         /* add a null byte to make inflate happy */

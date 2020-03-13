@@ -4,10 +4,10 @@
 
 int Unshield::unshield_directory_count() const
 {
-	/* XXX: multi-volume support... */
-	Header* header = this->header_list;
+    /* XXX: multi-volume support... */
+    Header* header = this->header_list;
 
-	return header->cab.directory_count;
+    return header->cab.directory_count;
 }
 
 const char* Unshield::unshield_directory_name(int index)
