@@ -518,7 +518,7 @@ bool UnshieldReader::unshield_reader_open_volume(int volume)
   else
     this->volume_bytes_left = volume_bytes_left_expanded;
 
-  fseek(this->volume_file, data_offset, SEEK_SET);
+  _fseeki64(this->volume_file, data_offset, SEEK_SET);
 
   this->volume = volume;
   success = true;

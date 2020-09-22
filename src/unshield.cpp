@@ -236,8 +236,8 @@ static bool handle_parameters(int argc, char *const argv[]) {
       break;
 
     case 'V':
-      printf("Unshield version " VERSION
-             ". Copyright (C) 2003-2013 David Eriksson.\n");
+      std::cout << "Unshield version " << VERSION <<
+             ". Copyright (C) 2003-2013 David Eriksson. Ported to Windows and C++ by Eric Christoffersen\n";
       exit(0);
       break;
 
@@ -251,7 +251,7 @@ static bool handle_parameters(int argc, char *const argv[]) {
   unshield_set_log_level(log_level);
 
   if (optind == argc || !argv[optind]) {
-    fprintf(stderr, "No action provided on command line.\n\n");
+    std::cerr << "No action provided on command line.\n\n";
     show_usage(argv[0]);
     return false;
   }
@@ -279,7 +279,7 @@ static bool handle_parameters(int argc, char *const argv[]) {
     break;
 
   default:
-    fprintf(stderr, "Unknown action '%c' on command line.\n\n", action_char);
+    std::cerr << "Unknown action '" << action_char << "' on command line.\n\n";
     show_usage(argv[0]);
     return false;
   }
@@ -287,8 +287,7 @@ static bool handle_parameters(int argc, char *const argv[]) {
   cab_file_name = argv[optind++];
 
   if (cab_file_name == NULL) {
-    fprintf(stderr,
-            "No InstallShield Cabinet File name provided on command line.\n\n");
+    std::cerr << "No InstallShield Cabinet File name provided on command line.\n\n";
     show_usage(argv[0]);
     return false;
   }
@@ -352,7 +351,7 @@ bool Unshield::extract_file(const char *prefix, int index) {
 
   cleanup_path(filenamepath, make_lowercase);
 
-  std::cout << "  extracting: " << filenamepath << std::endl;
+  std::cout << "  extracting: " << filenamepath.string() << std::endl;
   switch (format) {
   case FORMAT::FORMAT_NEW:
     success = this->unshield_file_save(index, filenamepath);
@@ -366,11 +365,11 @@ bool Unshield::extract_file(const char *prefix, int index) {
   }
 
   if (!success) {
-    fprintf(stderr, "Failed to extract file '%s'.%s\n",
-            this->unshield_file_name(index),
-            (log_level < 3)
-                ? "Run unshield again with -D 3 for more information."
-                : "");
+    std::cerr << "Failed to extract file '" << this->unshield_file_name(index)
+              << "'."
+              << ((log_level < 3)
+                   ? "Run unshield again with -D 3 for more information.\n"
+                   : "\n");
     exit_status = 1;
   }
 
@@ -411,16 +410,17 @@ int Unshield::extract_helper(const char *prefix, int first, int last) /*{{{*/
 } /*}}}*/
 
 bool Unshield::test_file(int index) {
-  printf("  testing: %s\n", this->unshield_file_name(index));
+  std::cout << "  testing: " << this->unshield_file_name(index) << std::endl;
 
   std::filesystem::path nope;
   bool success = this->unshield_file_save(index, nope);
   if (!success) {
-    fprintf(stderr, "Failed to extract file '%s'.%s\n",
-            this->unshield_file_name(index),
-            (log_level < 3)
-                ? "Run unshield again with -D 3 for more information."
-                : "");
+    std::cerr << "Failed to extract file '" 
+              << this->unshield_file_name(index)
+              << "'."
+              << ((log_level < 3)
+                   ? "Run unshield again with -D 3 for more information.\n"
+                   : "\n");
     exit_status = 1;
   }
 
@@ -447,10 +447,10 @@ bool Unshield::list_components() const {
     return false;
 
   for (size_t i = 0; i < count; i++) {
-    printf("%s\n", this->unshield_component_name(i));
+    std::cout << this->unshield_component_name(i) << std::endl;
   }
 
-  printf("-------\n%zd components\n", count);
+  std::cout << "-------\n" << count << " components\n";
 
   return true;
 }
@@ -462,10 +462,12 @@ bool Unshield::list_file_groups() const {
     return false;
 
   for (size_t i = 0; i < count; i++) {
-    printf("%s\n", this->unshield_file_group_name(i));
+    std::cout << this->unshield_file_group_name(i) << std::endl;
   }
 
-  printf("-------\n%zd file groups\n", count);
+  std::cout << "-------\n" 
+            << count 
+            << " file groups\n";
 
   return true;
 }
@@ -488,9 +490,12 @@ int Unshield::list_files_helper(const char *prefix, int first, int last) /*{{{*/
       dirpath.append(
           this->unshield_directory_name(this->unshield_file_directory(i)));
 
-      printf(" %8zi  %s%s\n", this->unshield_file_size(i),
-             dirpath.make_preferred().generic_string().c_str(),
-             this->unshield_file_name(i));
+      std::cout << " "
+                << this->unshield_file_size(i)
+                << " "
+                << dirpath.make_preferred().generic_string().c_str()
+                << this->unshield_file_name(i)
+                << std::endl;
     }
   }
 
@@ -505,7 +510,7 @@ bool Unshield::do_action(ActionHelper helper) {
   } else if (file_group_name) {
     UnshieldFileGroup *file_group =
         this->unshield_file_group_find(file_group_name);
-    printf("File group: %s\n", file_group_name);
+    std::cout << "File group: " << file_group_name << std::endl;
     if (file_group)
       count = (this->*helper)(file_group_name, file_group->first_file,
                               file_group->last_file);
@@ -518,7 +523,7 @@ bool Unshield::do_action(ActionHelper helper) {
     }
   }
 
-  printf(" --------  -------\n          %i files\n", count);
+  std::cout << " --------  -------\n          " << count << " files\n";
 
   return true;
 }
@@ -534,12 +539,11 @@ int main(int argc, char *const argv[]) {
 
   unshield = unshield_open_force_version(cab_file_name, is_version);
   if (!unshield) {
-    fprintf(stderr, "Failed to open %s as an InstallShield Cabinet File\n",
-            cab_file_name);
+    std::cerr << "Failed to open " << cab_file_name << " as an InstallShield Cabinet File\n";
     goto exit;
   }
 
-  printf("Cabinet: %s\n", cab_file_name);
+  std::cout << "Cabinet: " << cab_file_name << std::endl;
 
   switch (action) {
   case ACTION::ACTION_EXTRACT:
@@ -560,12 +564,10 @@ int main(int argc, char *const argv[]) {
 
   case ACTION::ACTION_TEST:
     if (strcmp(output_directory, DEFAULT_OUTPUT_DIRECTORY) != 0)
-      fprintf(stderr, "Output directory (-d) option has no effect with test "
-                      "(t) command.\n");
+      std::cerr << "Output directory (-d) option has no effect with test "
+                      "(t) command.\n";
     if (make_lowercase)
-      fprintf(
-          stderr,
-          "Make lowercase (-L) option has no effect with test (t) command.\n");
+      std::cerr << "Make lowercase (-L) option has no effect with test (t) command.\n";
     success = unshield->do_action(&Unshield::test_helper);
     break;
   }

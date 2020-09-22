@@ -98,9 +98,9 @@ long unshield_fsize(FILE* file)
 {
   long result;
   long previous = ftell(file);
-  fseek(file, 0L, SEEK_END);
+  _fseeki64(file, 0L, SEEK_END);
   result = ftell(file);
-  fseek(file, previous, SEEK_SET);
+  _fseeki64(file, previous, SEEK_SET);
   return result;
 }
 
